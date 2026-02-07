@@ -131,6 +131,39 @@ code {
   background: rgba(255, 255, 255, 0.18);
 }
 
+/* ----- Language Switcher ----- */
+.lang-switcher {
+  display: flex;
+  gap: 4px;
+  margin-left: 4px;
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+  padding-left: 16px;
+}
+
+.lang-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--color-dark-muted);
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  font-family: inherit;
+}
+
+.lang-btn:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.lang-btn.active {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 /* ============================================================
    Hero
    ============================================================ */
@@ -461,6 +494,11 @@ code {
     height: auto;
     padding: 12px 0;
     gap: 10px;
+  }
+
+  .lang-switcher {
+    border-left: none;
+    padding-left: 0;
   }
 
   .hero h1 {
