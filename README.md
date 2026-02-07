@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/site/assets/LOGO_EN_COMPACT.png" width="600" alt="EasyClaw">
+  <img src="website/site/assets/LOGO_EN_COMPACT.png" width="400" alt="EasyClaw">
 </p>
 
 <p align="center">
