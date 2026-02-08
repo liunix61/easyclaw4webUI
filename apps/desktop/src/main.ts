@@ -293,8 +293,14 @@ app.whenReady().then(async () => {
     log.warn("Failed to cleanup gateway processes:", err);
   }
 
+  // In packaged app, vendor lives in Resources/vendor/openclaw (extraResources).
+  // In dev, resolveVendorEntryPath() resolves relative to source via import.meta.url.
+  const vendorDir = app.isPackaged
+    ? join(process.resourcesPath, "vendor", "openclaw")
+    : undefined;
+
   const launcher = new GatewayLauncher({
-    entryPath: resolveVendorEntryPath(),
+    entryPath: resolveVendorEntryPath(vendorDir),
     nodeBin: process.execPath,
     env: { ELECTRON_RUN_AS_NODE: "1" },
     configPath,
@@ -596,7 +602,9 @@ app.whenReady().then(async () => {
   await sttManager.initialize();
 
   // Start the panel server
-  const panelDistDir = resolve(__dirname, "../../panel/dist");
+  const panelDistDir = app.isPackaged
+    ? join(process.resourcesPath, "panel-dist")
+    : resolve(__dirname, "../../panel/dist");
   startPanelServer({
     port: PANEL_PORT,
     panelDistDir,

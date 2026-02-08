@@ -17,6 +17,22 @@ extraMetadata:
 asar: true
 icon: build/icon
 
+# Files copied outside asar into Contents/Resources/
+extraResources:
+  # OpenClaw vendor runtime — must be outside asar (runs as a separate Node.js process)
+  - from: "../../vendor/openclaw"
+    to: "vendor/openclaw"
+    filter:
+      - "openclaw.mjs"
+      - "package.json"
+      - "dist/**"
+      - "node_modules/**"
+      - "extensions/**"
+      - "packages/**"
+  # Panel UI static files
+  - from: "../panel/dist"
+    to: "panel-dist"
+
 mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
