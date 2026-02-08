@@ -9,6 +9,7 @@ files:
   - build/trayIcon.png
   - build/trayIcon@2x.png
   - node_modules/**
+  - "!node_modules/**/test_extension.node"
   - package.json
 
 extraMetadata:
@@ -28,7 +29,9 @@ extraResources:
       - "dist/**"
       - "node_modules/**"
       - "extensions/**"
+      - "!extensions/**/node_modules/**"
       - "packages/**"
+      - "!packages/**/node_modules/**"
   # Panel UI static files
   - from: "../panel/dist"
     to: "panel-dist"
