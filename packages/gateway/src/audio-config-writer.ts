@@ -36,10 +36,10 @@ export function generateAudioConfig(
   const models: AudioModelConfig[] = [];
 
   if (provider === "groq") {
-    // Groq uses OpenAI-compatible API with Whisper model
+    // Groq has native support in OpenClaw with whisper-large-v3-turbo
     models.push({
-      provider: "openai",
-      model: "whisper-1", // OpenAI Whisper API compatible
+      provider: "groq",
+      model: "whisper-large-v3-turbo",
       type: "provider",
       capabilities: ["audio"],
     });

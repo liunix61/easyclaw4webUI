@@ -16,7 +16,7 @@ export function ManageAllowlistModal({
   channelId,
   channelLabel,
 }: ManageAllowlistModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const [pairingRequests, setPairingRequests] = useState<PairingRequest[]>([]);
   const [allowlist, setAllowlist] = useState<string[]>([]);
@@ -54,7 +54,7 @@ export function ManageAllowlistModal({
     setError(null);
 
     try {
-      const result = await approvePairing(channelId, code);
+      const result = await approvePairing(channelId, code, i18n.language);
 
       // Remove from pending requests
       setPairingRequests(prev => prev.filter(r => r.code !== code));

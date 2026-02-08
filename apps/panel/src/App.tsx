@@ -8,7 +8,8 @@ import { ChannelsPage } from "./pages/ChannelsPage.js";
 import { PermissionsPage } from "./pages/PermissionsPage.js";
 import { SttPage } from "./pages/SttPage.js";
 import { UsagePage } from "./pages/UsagePage.js";
-import { SettingsPage } from "./pages/SettingsPage.js";
+// TODO: Unhide after server-side telemetry receiver is deployed (see PROGRESS.md V1)
+// import { SettingsPage } from "./pages/SettingsPage.js";
 import { OnboardingPage } from "./pages/OnboardingPage.js";
 import { fetchSettings } from "./api.js";
 
@@ -19,7 +20,8 @@ const PAGES: Record<string, () => ReactNode> = {
   "/permissions": PermissionsPage,
   "/stt": SttPage,
   "/usage": UsagePage,
-  "/settings": SettingsPage,
+  // TODO: Unhide after server-side telemetry receiver is deployed (see PROGRESS.md V1)
+  // "/settings": SettingsPage,
 };
 
 /** Normalise a browser pathname to one of our known routes, defaulting to "/" */

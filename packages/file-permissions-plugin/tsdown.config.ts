@@ -1,7 +1,9 @@
 import { defineConfig } from "tsdown";
 
 export default defineConfig({
-  entry: ["src/index.ts"],
+  entry: {
+    "easyclaw-file-permissions": "src/index.ts",
+  },
   format: ["esm"],
   dts: true,
   clean: true,

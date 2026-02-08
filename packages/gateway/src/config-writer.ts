@@ -37,9 +37,9 @@ function resolveFilePermissionsPluginPath(): string {
   const monorepoRoot = findMonorepoRoot();
   if (!monorepoRoot) {
     // Fallback: assume we're in the monorepo root
-    return resolve(process.cwd(), "packages", "file-permissions-plugin", "dist", "index.mjs");
+    return resolve(process.cwd(), "packages", "file-permissions-plugin", "dist", "easyclaw-file-permissions.mjs");
   }
-  return resolve(monorepoRoot, "packages", "file-permissions-plugin", "dist", "index.mjs");
+  return resolve(monorepoRoot, "packages", "file-permissions-plugin", "dist", "easyclaw-file-permissions.mjs");
 }
 
 /** Generate a random hex token for gateway auth. */
@@ -356,6 +356,8 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
     // Generate OpenClaw tools.media.audio configuration
     const audioConfig = generateAudioConfig(options.stt.enabled, options.stt.provider);
     mergeAudioConfig(config, audioConfig);
+    // Note: STT API keys are passed via environment variables (GROQ_API_KEY, etc.)
+    // OpenClaw's audio providers automatically read from env vars.
   }
 
   writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n", "utf-8");

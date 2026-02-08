@@ -388,10 +388,10 @@ export async function fetchAllowlist(channelId: string): Promise<string[]> {
   return data.allowlist;
 }
 
-export async function approvePairing(channelId: string, code: string): Promise<{ id: string }> {
+export async function approvePairing(channelId: string, code: string, locale?: string): Promise<{ id: string }> {
   const data = await fetchJson<{ id: string }>("/pairing/approve", {
     method: "POST",
-    body: JSON.stringify({ channelId, code }),
+    body: JSON.stringify({ channelId, code, locale }),
   });
   return data;
 }

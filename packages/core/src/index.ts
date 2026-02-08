@@ -7,8 +7,10 @@ export type {
   PermissionConfig,
   ProviderKeyEntry,
   EasyClawConfig,
+  SttProvider,
+  SttSettings,
 } from "./types/index.js";
-export { easyClawConfigSchema } from "./types/index.js";
+export { easyClawConfigSchema, DEFAULT_STT_SETTINGS, STT_SETTINGS_KEYS, STT_SECRET_KEYS } from "./types/index.js";
 
 export type { ChannelType } from "./channels.js";
 export { ALL_CHANNELS, BUILTIN_CHANNELS, CUSTOM_CHANNELS } from "./channels.js";

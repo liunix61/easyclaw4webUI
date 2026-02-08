@@ -229,6 +229,34 @@ function emptyUsageSummary(): UsageSummary {
 
 // --- Channel Message Senders ---
 
+/** Detect system locale: "zh" for Chinese systems, "en" for everything else. */
+function getSystemLocale(): "zh" | "en" {
+  try {
+    const locale = Intl.DateTimeFormat().resolvedOptions().locale;
+    return locale.startsWith("zh") ? "zh" : "en";
+  } catch {
+    return "en";
+  }
+}
+
+const PAIRING_MESSAGES = {
+  zh: [
+    "💡 [EasyClaw] 您的配对请求已收到。",
+    "",
+    "请前往管理面板 → 通道，选择要配对的通道并点击「白名单」完成配对。",
+  ].join("\n"),
+  en: [
+    "💡 [EasyClaw] Your pairing request has been received.",
+    "",
+    "Please go to the panel → Channels, find the channel you want to match and click the \"Whitelist\" button.",
+  ].join("\n"),
+};
+
+const APPROVAL_MESSAGES = {
+  zh: "✅ [EasyClaw] 您的访问已获批准！现在可以开始和我对话了。",
+  en: "✅ [EasyClaw] Your access has been approved! You can start chatting now.",
+};
+
 /**
  * Read the first account config for a channel from the OpenClaw config.
  * Returns { accountId, config } or null.
@@ -485,13 +513,7 @@ function startPairingNotifier(): { stop: () => void } {
           if (!req.code || knownCodes.has(req.code)) continue;
           knownCodes.add(req.code);
 
-          const message = [
-            "💡 [EasyClaw] 您的配对请求已收到。",
-            "",
-            "管理员将通过 EasyClaw 管理面板审核您的请求，请耐心等待。",
-            "",
-            "Your pairing request has been received. The administrator will review it shortly.",
-          ].join("\n");
+          const message = PAIRING_MESSAGES[getSystemLocale()];
 
           log.info(`Sending pairing follow-up to ${channelId} user ${req.id}`);
           sendChannelMessage(channelId, req.id, message);
@@ -1622,6 +1644,7 @@ async function handleApiRoute(
     const body = (await parseBody(req)) as {
       channelId?: string;
       code?: string;
+      locale?: string;
     };
 
     if (!body.channelId || !body.code) {
@@ -1661,13 +1684,8 @@ async function handleApiRoute(
       log.info(`Approved pairing for ${body.channelId}: ${request.id}`);
 
       // Send approval confirmation to the user via their channel
-      const confirmMsg = [
-        "✅ [EasyClaw] 您的访问已获批准！",
-        "",
-        "现在可以开始和我对话了。",
-        "",
-        "Your access has been approved! You can start chatting now.",
-      ].join("\n");
+      const locale = (body.locale === "zh" ? "zh" : "en") as "zh" | "en";
+      const confirmMsg = APPROVAL_MESSAGES[locale];
       sendChannelMessage(body.channelId, request.id, confirmMsg).then(ok => {
         if (ok) log.info(`Sent approval confirmation to ${body.channelId} user ${request.id}`);
       });

@@ -385,6 +385,41 @@ app.whenReady().then(async () => {
   }
 
   /**
+   * Called when STT settings or credentials change.
+   * Regenerates gateway config and restarts gateway to apply new env vars.
+   */
+  async function handleSttChange(): Promise<void> {
+    log.info("STT settings changed, regenerating config and restarting gateway");
+
+    // Read updated STT settings
+    const sttEnabled = storage.settings.get("stt.enabled") === "true";
+    const sttProvider = (storage.settings.get("stt.provider") || "groq") as "groq" | "volcengine";
+
+    // Regenerate OpenClaw config with updated STT/audio settings
+    writeGatewayConfig({
+      configPath,
+      stt: {
+        enabled: sttEnabled,
+        provider: sttProvider,
+      },
+    });
+
+    // Rebuild environment with updated STT credentials (GROQ_API_KEY, etc.)
+    const secretEnv = await buildGatewayEnv(secretStore, { ELECTRON_RUN_AS_NODE: "1" }, storage, workspacePath);
+    const proxyEnv = buildProxyEnv();
+    launcher.setEnv({ ...secretEnv, ...proxyEnv });
+
+    // Reinitialize STT manager
+    await sttManager.initialize().catch((err) => {
+      log.error("Failed to reinitialize STT manager:", err);
+    });
+
+    // Full restart to apply new environment variables and config
+    await launcher.stop();
+    await launcher.start();
+  }
+
+  /**
    * Called when file permissions change.
    * Rebuilds environment variables and restarts the gateway to apply the new permissions.
    */
@@ -474,6 +509,9 @@ app.whenReady().then(async () => {
     }, 2000); // Wait 2s for gateway to complete reload
   }
 
+  // Determine system locale for tray menu i18n
+  const systemLocale = app.getLocale().startsWith("zh") ? "zh" : "en";
+
   // Create tray
   const tray = new Tray(createTrayIcon("stopped"));
 
@@ -492,7 +530,7 @@ app.whenReady().then(async () => {
         onQuit: () => {
           app.quit();
         },
-      }),
+      }, systemLocale),
     );
   }
 
@@ -599,9 +637,8 @@ app.whenReady().then(async () => {
     },
     sttManager,
     onSttChange: () => {
-      log.info("STT settings changed, reinitializing...");
-      sttManager.initialize().catch((err) => {
-        log.error("Failed to reinitialize STT manager:", err);
+      handleSttChange().catch((err) => {
+        log.error("Failed to handle STT change:", err);
       });
     },
     onPermissionsChange: () => {

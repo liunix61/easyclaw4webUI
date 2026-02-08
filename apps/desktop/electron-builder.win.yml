@@ -28,3 +28,8 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: "EasyClaw"
+  installerLanguages:
+    - English
+    - SimpChinese
+  language: 0409
+  multiLanguageInstaller: true
