@@ -4,6 +4,7 @@ node_modules/
 dist/
 .turbo/
 .vscode/
+.claude/
 *.tsbuildinfo
 .DS_Store
 server/
