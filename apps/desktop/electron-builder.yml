@@ -49,6 +49,10 @@ mac:
   entitlementsInherit: entitlements.mac.plist
   identity: null
   notarize: false
+  # Vendor node_modules may contain Mach-O binaries (esbuild, etc.)
+  # that are identical in both x64/arm64 builds. Tell the universal
+  # merge to skip lipo for these files.
+  x64ArchFiles: "Contents/Resources/vendor/openclaw/node_modules/**"
 
 dmg:
   background: build/dmg-background.png
