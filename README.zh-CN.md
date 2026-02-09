@@ -48,8 +48,20 @@ EasyClaw 通过 OpenClaw 插件在工具调用*执行前*拦截并验证文件�
 ## 快速开始
 
 ```bash
+# 1. 克隆并构建内置的 OpenClaw 运行时
+git clone https://github.com/openclaw/openclaw.git vendor/openclaw
+cd vendor/openclaw
+git checkout e78ae48e6
+echo 'node-linker=hoisted' > .npmrc
+pnpm install --no-frozen-lockfile
+pnpm run build
+cd ../..
+
+# 2. 安装工作区依赖并构建
 pnpm install
 pnpm build
+
+# 3. 以开发模式启动
 pnpm --filter @easyclaw/desktop dev
 ```
 
@@ -104,20 +116,23 @@ Monorepo 使用 pnpm workspaces（`apps/*`、`packages/*`、`extensions/*`），
 | `@easyclaw/rules`           | 规则编译、Skill 生命周期（激活/停用）、Skill 文件写入器（将规则具象化为 OpenClaw 的 SKILL.md 文件）。                           |
 | `@easyclaw/secrets`         | 平台感知的密钥存储。macOS Keychain、文件回退方案、测试用内存存储。                                                             |
 | `@easyclaw/updater`         | 检查网站上的 `update-manifest.json`，通知用户新版本。                                                                          |
-| `@easyclaw/stt`             | 语音转文字服务商抽象层。                                                                                                       |
-| `@easyclaw/openclaw-plugin` | OpenClaw 插件 SDK 集成。                                                                                                       |
+| `@easyclaw/stt`                     | 语音转文字服务商抽象层。                                                                                                       |
+| `@easyclaw/proxy-router`           | HTTP CONNECT 代理，根据服务商域名配置将请求路由到不同的上游代理。                                                                |
+| `@easyclaw/telemetry`              | 隐私优先的遥测客户端，支持批量上传和重试机制；不收集个人身份信息。                                                                |
+| `@easyclaw/file-permissions-plugin` | OpenClaw 插件，通过在工具调用执行前拦截和验证来强制执行文件访问权限。                                                            |
+| `@easyclaw/openclaw-plugin`        | OpenClaw 插件 SDK 集成。                                                                                                       |
 
 ## 脚本
 
-所有根目录脚本通过 Turbo 运行：
+大部分根目录脚本通过 Turbo 运行：
 
 ```bash
 pnpm build        # 构建所有包（遵循依赖图）
 pnpm dev          # 以开发模式运行 desktop + panel
 pnpm test         # 运行所有测试（vitest）
 pnpm lint         # 检查所有包（oxlint）
-pnpm format       # 检查格式（oxfmt）
-pnpm format:fix   # 自动修复格式
+pnpm format       # 检查格式（oxfmt，直接运行）
+pnpm format:fix   # 自动修复格式（oxfmt，直接运行）
 ```
 
 ### 单包命令
@@ -192,6 +207,14 @@ pnpm --filter @easyclaw/gateway test
 | `~/.openclaw/skills/`            | 自动生成的 Skill 文件  |
 
 ## 构建安装包
+
+`dist:mac` 和 `dist:win` 脚本会在打包前自动将 `vendor/openclaw/node_modules` 剪裁为仅生产依赖。这将 DMG 从约 360MB 缩减到约 270MB。
+
+**构建完成后**，vendor 的 node_modules 会被剪裁。要恢复完整依赖用于开发：
+
+```bash
+cd vendor/openclaw && CI=true pnpm install --no-frozen-lockfile && cd ../..
+```
 
 ### macOS（DMG，universal arm64+x64）
 

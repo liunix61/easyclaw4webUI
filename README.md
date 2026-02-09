@@ -116,20 +116,23 @@ The monorepo uses pnpm workspaces (`apps/*`, `packages/*`, `extensions/*`) with 
 | `@easyclaw/rules`           | Rule compilation, skill lifecycle (activate/deactivate), skill file writer that materializes rules as SKILL.md files for OpenClaw.                                                     |
 | `@easyclaw/secrets`         | Platform-aware secret storage. macOS Keychain, file-based fallback, in-memory for tests.                                                                                               |
 | `@easyclaw/updater`         | Checks `update-manifest.json` on the website, notifies user of new versions.                                                                                                           |
-| `@easyclaw/stt`             | Speech-to-text provider abstraction.                                                                                                                                                   |
-| `@easyclaw/openclaw-plugin` | OpenClaw plugin SDK integration.                                                                                                                                                       |
+| `@easyclaw/stt`                     | Speech-to-text provider abstraction.                                                                                                                                                   |
+| `@easyclaw/proxy-router`           | HTTP CONNECT proxy that routes requests to different upstream proxies based on per-provider domain configuration.                                                                       |
+| `@easyclaw/telemetry`              | Privacy-first telemetry client with batch uploads and retry logic; no PII collected.                                                                                                   |
+| `@easyclaw/file-permissions-plugin` | OpenClaw plugin that enforces file access permissions by intercepting and validating tool calls before execution.                                                                      |
+| `@easyclaw/openclaw-plugin`        | OpenClaw plugin SDK integration.                                                                                                                                                       |
 
 ## Scripts
 
-All root scripts run through Turbo:
+Most root scripts run through Turbo:
 
 ```bash
 pnpm build        # Build all packages (respects dependency graph)
 pnpm dev          # Run desktop + panel in dev mode
 pnpm test         # Run all tests (vitest)
 pnpm lint         # Lint all packages (oxlint)
-pnpm format       # Check formatting (oxfmt)
-pnpm format:fix   # Auto-fix formatting
+pnpm format       # Check formatting (oxfmt, runs directly)
+pnpm format:fix   # Auto-fix formatting (oxfmt, runs directly)
 ```
 
 ### Per-package
