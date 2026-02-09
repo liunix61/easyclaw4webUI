@@ -91,15 +91,23 @@ async function handleBeforeToolCall(
     return;
   }
 
-  // Read tools and exec tools check both read+write paths (mode "read").
-  // Only dedicated write tools (write/edit/apply-patch) require write permissions.
-  const mode = isWrite ? "write" : "read";
+  // Determine permission check mode:
+  // - "write": dedicated write tools (write/edit/apply-patch) require write permissions
+  // - "read": dedicated read tools check both read+write paths
+  // - "unknown": exec/process tools — actual access intent is ambiguous;
+  //   treated as "read" for now, pending future LLM-based command analysis
+  const mode: "read" | "write" | "unknown" = isWrite
+    ? "write"
+    : isRead
+      ? "read"
+      : "unknown";
+  const effectiveMode = mode === "unknown" ? "read" : mode;
 
   // Validate all file paths
   const deniedPaths: string[] = [];
   for (const filePath of filePaths) {
-    const allowed = isPathAllowed(filePath, permissions, mode);
-    log?.info?.(`[file-perms] isPathAllowed(${filePath}, ${mode}) = ${allowed}`);
+    const allowed = isPathAllowed(filePath, permissions, effectiveMode);
+    log?.info?.(`[file-perms] isPathAllowed(${filePath}, mode=${mode}, effective=${effectiveMode}) = ${allowed}`);
     if (!allowed) {
       deniedPaths.push(filePath);
     }

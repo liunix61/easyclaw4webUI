@@ -704,7 +704,7 @@ app.whenReady().then(async () => {
   // Proxy router config is written so dynamic proxy routing is ready.
   // Env vars point to fixed local proxy (127.0.0.1:9999), no need to rebuild on changes.
   // File permissions are injected as EASYCLAW_FILE_PERMISSIONS env var.
-  const workspacePath = process.cwd();
+  const workspacePath = stateDir;
   Promise.all([
     syncAllAuthProfiles(stateDir, storage, secretStore),
     writeProxyRouterConfig(storage, secretStore),

@@ -1837,9 +1837,9 @@ async function handleApiRoute(
 
   // --- Workspace Path ---
   if (pathname === "/api/workspace" && req.method === "GET") {
-    // Return the OpenClaw workspace path (where the gateway process is running)
-    // This is typically the directory where EasyClaw desktop app is running
-    const workspacePath = process.cwd();
+    // Return the OpenClaw state directory as the workspace path.
+    // Cannot use process.cwd() because packaged macOS apps have cwd="/".
+    const workspacePath = resolveOpenClawStateDir();
     sendJson(res, 200, { workspacePath });
     return;
   }

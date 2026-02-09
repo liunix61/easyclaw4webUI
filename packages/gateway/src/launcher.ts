@@ -160,6 +160,7 @@ export class GatewayLauncher extends EventEmitter<GatewayEvents> {
 
     const child = spawn(this.options.nodeBin, [this.options.entryPath, "gateway"], {
       env,
+      cwd: this.options.stateDir || undefined,
       stdio: ["ignore", "pipe", "pipe"],
     });
 
