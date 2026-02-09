@@ -11,3 +11,4 @@ server/
 apps/desktop/release/
 .venv/
 .env
+CLAUDE.md

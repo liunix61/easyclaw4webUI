@@ -88,6 +88,21 @@ APPLE_APP_SPECIFIC_PASSWORD # App-specific password
 APPLE_TEAM_ID              # 10-character team ID
 ```
 
+## 📦 Vendor Pruning
+
+The CI workflow and local `dist:mac`/`dist:win` scripts automatically prune `vendor/openclaw/node_modules` before packaging to reduce installer size (~357MB → ~260MB DMG).
+
+**How it works:**
+
+- **CI (`build.yml`)**: Runs `pnpm install --prod --no-frozen-lockfile` during vendor setup, removing devDependencies before the app build step.
+- **Local (`dist:mac` / `dist:win`)**: Runs `apps/desktop/scripts/prune-vendor-deps.cjs` which performs 3-phase pruning (prod install → remove non-gateway packages → strip docs/tests/maps). Idempotent — skips if already pruned.
+
+**After building locally**, vendor node_modules will be pruned. To restore full deps for development:
+
+```bash
+cd vendor/openclaw && CI=true pnpm install --no-frozen-lockfile && cd ../..
+```
+
 ## 🐛 Troubleshooting
 
 ### Build Failures
