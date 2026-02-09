@@ -23,6 +23,8 @@ import type { LLMConfig } from "@easyclaw/rules";
 import { ProxyRouter } from "@easyclaw/proxy-router";
 import type { ProxyRouterConfig } from "@easyclaw/proxy-router";
 import { RemoteTelemetryClient } from "@easyclaw/telemetry";
+import { checkForUpdate } from "@easyclaw/updater";
+import type { UpdateCheckResult } from "@easyclaw/updater";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync } from "node:fs";
@@ -212,6 +214,31 @@ app.whenReady().then(async () => {
   } else {
     log.info("Telemetry disabled (user preference)");
   }
+
+  // --- Update checker ---
+  let latestUpdateResult: UpdateCheckResult | null = null;
+
+  async function performUpdateCheck(): Promise<void> {
+    const result = await checkForUpdate(app.getVersion());
+    latestUpdateResult = result;
+    if (result.updateAvailable) {
+      log.info(`Update available: v${result.latestVersion}`);
+    }
+    // Refresh tray to show/hide update item
+    updateTray(currentState);
+  }
+
+  // Check on startup (fire-and-forget, non-blocking)
+  performUpdateCheck().catch((err) => {
+    log.warn("Startup update check failed:", err);
+  });
+
+  // Re-check every 4 hours
+  setInterval(() => {
+    performUpdateCheck().catch((err) => {
+      log.warn("Periodic update check failed:", err);
+    });
+  }, 4 * 60 * 60 * 1000);
 
   // Start proxy router first (before gateway)
   const proxyRouter = new ProxyRouter({
@@ -535,9 +562,17 @@ app.whenReady().then(async () => {
           await launcher.stop();
           await launcher.start();
         },
+        onCheckForUpdates: () => {
+          performUpdateCheck().catch((err) => {
+            log.warn("Manual update check failed:", err);
+          });
+        },
         onQuit: () => {
           app.quit();
         },
+        updateInfo: latestUpdateResult?.updateAvailable && latestUpdateResult.download
+          ? { latestVersion: latestUpdateResult.latestVersion!, downloadUrl: latestUpdateResult.download.url }
+          : undefined,
       }, systemLocale),
     );
   }
@@ -612,6 +647,7 @@ app.whenReady().then(async () => {
     storage,
     secretStore,
     getRpcClient: () => rpcClient,
+    getUpdateResult: () => latestUpdateResult,
     onRuleChange: (action, ruleId) => {
       log.info(`Rule ${action}: ${ruleId}`);
       if (action === "created" || action === "updated") {

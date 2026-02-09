@@ -1,4 +1,4 @@
-import { Menu } from "electron";
+import { Menu, shell } from "electron";
 import type { MenuItemConstructorOptions } from "electron";
 import type { GatewayState } from "@easyclaw/gateway";
 
@@ -7,6 +7,8 @@ interface TrayLabels {
   state: Record<GatewayState, string>;
   openPanel: string;
   restartGateway: string;
+  checkForUpdates: string;
+  updateAvailable: string;
   quit: string;
 }
 
@@ -21,6 +23,8 @@ const LABELS: Record<string, TrayLabels> = {
     },
     openPanel: "Open Panel",
     restartGateway: "Restart Gateway",
+    checkForUpdates: "Check for Updates",
+    updateAvailable: "Update Available: v{{version}}",
     quit: "Quit EasyClaw",
   },
   zh: {
@@ -32,6 +36,8 @@ const LABELS: Record<string, TrayLabels> = {
     },
     openPanel: "打开面板",
     restartGateway: "重启网关",
+    checkForUpdates: "检查更新",
+    updateAvailable: "有新版本: v{{version}}",
     quit: "退出 EasyClaw",
   },
 };
@@ -40,14 +46,17 @@ const LABELS: Record<string, TrayLabels> = {
 export interface TrayMenuCallbacks {
   onOpenPanel: () => void;
   onRestartGateway: () => void;
+  onCheckForUpdates: () => void;
   onQuit: () => void;
+  /** If set, shows "Update Available" instead of "Check for Updates". */
+  updateInfo?: { latestVersion: string; downloadUrl: string };
 }
 
 /**
  * Build the tray context menu.
  *
  * The menu displays the current gateway status (as a disabled label),
- * followed by action items: Open Panel, Restart Gateway, and Quit.
+ * followed by action items: Open Panel, Restart Gateway, Update, and Quit.
  *
  * @param locale - "en" or "zh"; defaults to "en".
  */
@@ -58,6 +67,16 @@ export function buildTrayMenu(
 ): Menu {
   const labels = LABELS[locale] ?? LABELS.en;
   const isTransitioning = state === "starting" || state === "stopping";
+
+  const updateItem: MenuItemConstructorOptions = callbacks.updateInfo
+    ? {
+        label: labels.updateAvailable.replace("{{version}}", callbacks.updateInfo.latestVersion),
+        click: () => shell.openExternal(callbacks.updateInfo!.downloadUrl),
+      }
+    : {
+        label: labels.checkForUpdates,
+        click: callbacks.onCheckForUpdates,
+      };
 
   const template: MenuItemConstructorOptions[] = [
     {
@@ -76,6 +95,8 @@ export function buildTrayMenu(
       click: callbacks.onRestartGateway,
       enabled: !isTransitioning,
     },
+    { type: "separator" },
+    updateItem,
     { type: "separator" },
     {
       label: labels.quit,

@@ -492,6 +492,11 @@ export default {
       failedToSave: "Failed to save telemetry settings: ",
     },
   },
+  update: {
+    bannerText: "New version {{version}} is available.",
+    download: "Download",
+    dismiss: "Dismiss",
+  },
   onboarding: {
     skipSetup: "Skip setup",
     welcomeTitle: "Welcome to EasyClaw",

@@ -368,6 +368,20 @@ export async function updateTelemetrySetting(enabled: boolean): Promise<void> {
   });
 }
 
+// --- App Update ---
+
+export interface UpdateInfo {
+  updateAvailable: boolean;
+  currentVersion: string | null;
+  latestVersion: string | null;
+  downloadUrl: string | null;
+  releaseNotes: string | null;
+}
+
+export async function fetchUpdateInfo(): Promise<UpdateInfo> {
+  return fetchJson<UpdateInfo>("/app/update");
+}
+
 // --- Pairing ---
 
 export interface PairingRequest {

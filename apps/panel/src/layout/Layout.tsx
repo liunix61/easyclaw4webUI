@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { fetchUpdateInfo } from "../api.js";
+import type { UpdateInfo } from "../api.js";
 
 export function Layout({
   children,
@@ -11,6 +14,18 @@ export function Layout({
   onNavigate: (path: string) => void;
 }) {
   const { t, i18n } = useTranslation();
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    fetchUpdateInfo()
+      .then((info) => {
+        if (info.updateAvailable) setUpdateInfo(info);
+      })
+      .catch(() => {
+        // Silently ignore — update check is best-effort
+      });
+  }, []);
 
   const NAV_ITEMS = [
     { path: "/", label: t("nav.rules") },
@@ -26,6 +41,8 @@ export function Layout({
   function toggleLang() {
     i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
   }
+
+  const showBanner = updateInfo && !dismissed;
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
@@ -67,6 +84,50 @@ export function Layout({
             {i18n.language === "zh" ? "English" : "中文"}
           </button>
         </div>
+        {showBanner && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: "8px 16px",
+              backgroundColor: "#eff6ff",
+              borderBottom: "1px solid #bfdbfe",
+              fontSize: 13,
+              color: "#1e40af",
+            }}
+          >
+            <span style={{ flex: 1 }}>
+              {t("update.bannerText", { version: updateInfo.latestVersion })}
+              {updateInfo.downloadUrl && (
+                <>
+                  {" "}
+                  <a
+                    href={updateInfo.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{ color: "#1d4ed8", fontWeight: 500 }}
+                  >
+                    {t("update.download")}
+                  </a>
+                </>
+              )}
+            </span>
+            <button
+              onClick={() => setDismissed(true)}
+              style={{
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                color: "#1e40af",
+                fontSize: 13,
+                padding: "2px 6px",
+              }}
+            >
+              {t("update.dismiss")}
+            </button>
+          </div>
+        )}
         <main>{children}</main>
       </div>
     </div>

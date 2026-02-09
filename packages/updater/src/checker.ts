@@ -90,7 +90,7 @@ export async function checkForUpdate(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.error(`Update check failed: ${message}`);
+    log.warn(`Update check failed: ${message}`);
     return {
       updateAvailable: false,
       currentVersion,

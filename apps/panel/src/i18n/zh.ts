@@ -492,6 +492,11 @@ export default {
       failedToSave: "保存遥测设置失败：",
     },
   },
+  update: {
+    bannerText: "新版本 {{version}} 已发布。",
+    download: "下载",
+    dismiss: "忽略",
+  },
   onboarding: {
     skipSetup: "跳过设置",
     welcomeTitle: "欢迎使用爪爪",

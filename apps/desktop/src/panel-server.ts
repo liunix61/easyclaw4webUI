@@ -594,6 +594,15 @@ export interface PanelServerOptions {
   onChannelConfigured?: (channelId: string) => void;
   /** Override path to the vendored OpenClaw directory (for packaged app). */
   vendorDir?: string;
+  /** Getter for the latest update check result. */
+  getUpdateResult?: () => {
+    updateAvailable: boolean;
+    currentVersion: string;
+    latestVersion?: string;
+    download?: { url: string; sha256: string; size: number };
+    releaseNotes?: string;
+    error?: string;
+  } | null;
 }
 
 /**
@@ -771,7 +780,7 @@ async function syncActiveKey(
 export function startPanelServer(options: PanelServerOptions): Server {
   const port = options.port ?? 3210;
   const distDir = resolve(options.panelDistDir);
-  const { storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, vendorDir } = options;
+  const { storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, vendorDir, getUpdateResult } = options;
 
   // Ensure vendor OpenClaw functions (loadCostUsageSummary, discoverAllSessions)
   // read from EasyClaw's state dir (~/.easyclaw/openclaw/) instead of ~/.openclaw/
@@ -798,7 +807,7 @@ export function startPanelServer(options: PanelServerOptions): Server {
     // API routes
     if (pathname.startsWith("/api/")) {
       try {
-        await handleApiRoute(req, res, url, pathname, storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, vendorDir);
+        await handleApiRoute(req, res, url, pathname, storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, vendorDir, getUpdateResult);
       } catch (err) {
         log.error("API error:", err);
         sendJson(res, 500, { error: "Internal server error" });
@@ -850,6 +859,13 @@ async function handleApiRoute(
   onPermissionsChange?: () => void,
   onChannelConfigured?: (channelId: string) => void,
   vendorDir?: string,
+  getUpdateResult?: () => {
+    updateAvailable: boolean;
+    currentVersion: string;
+    latestVersion?: string;
+    download?: { url: string; sha256: string; size: number };
+    releaseNotes?: string;
+  } | null,
 ): Promise<void> {
   // --- Status ---
   if (pathname === "/api/status" && req.method === "GET") {
@@ -1366,6 +1382,20 @@ async function handleApiRoute(
   if (pathname === "/api/models" && req.method === "GET") {
     const catalog = await readFullModelCatalog(undefined, vendorDir);
     sendJson(res, 200, { models: catalog });
+    return;
+  }
+
+  // --- App Update ---
+
+  if (pathname === "/api/app/update" && req.method === "GET") {
+    const result = getUpdateResult?.();
+    sendJson(res, 200, {
+      updateAvailable: result?.updateAvailable ?? false,
+      currentVersion: result?.currentVersion ?? null,
+      latestVersion: result?.latestVersion ?? null,
+      downloadUrl: result?.download?.url ?? null,
+      releaseNotes: result?.releaseNotes ?? null,
+    });
     return;
   }
 
