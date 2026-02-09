@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="website/site/assets/LOGO_CN_BOY_COMPACT.png" width="300" alt="爪爪">
+  <img src="assets/LOGO_CN_BOY_COMPACT.png" width="300" alt="爪爪">
 </p>
 
 <p align="center">
