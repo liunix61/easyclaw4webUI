@@ -215,7 +215,7 @@ app.whenReady().then(async () => {
   // Initialize telemetry client (privacy-first, user opt-in required)
   // DISABLED: Telemetry endpoint not configured yet
   const telemetryEnabled = false; // storage.settings.get("telemetry_enabled") === "true";
-  const telemetryEndpoint = process.env.TELEMETRY_ENDPOINT || "https://telemetry.easyclaw.com/api/telemetry/";
+  const telemetryEndpoint = process.env.TELEMETRY_ENDPOINT || "https://t.easy-claw.com/";
   let telemetryClient: RemoteTelemetryClient | null = null;
 
   if (telemetryEnabled) {

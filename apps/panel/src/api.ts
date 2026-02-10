@@ -498,7 +498,7 @@ export interface ProviderPricing {
   models: ModelPricing[];
 }
 
-const PRICING_API_URL = "https://www.easy-claw.com/api/graphql";
+const PRICING_API_URL = "https://api.easy-claw.com/graphql";
 
 /**
  * Fetch model pricing data from the cloud backend.
