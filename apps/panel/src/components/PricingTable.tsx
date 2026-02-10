@@ -19,7 +19,7 @@ export function PricingTable({
   const providerLabel = PROVIDER_LABELS[provider as LLMProvider] ?? provider;
 
   return (
-    <div className="section-card" style={{ padding: "16px 18px", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+    <div className="section-card" style={{ padding: "16px 18px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
       <h4 style={{ margin: "0 0 4px 0", fontSize: 14, flexShrink: 0 }}>
         {providerLabel} — {t("providers.pricingTitle")}
         <span style={{ fontSize: 11, color: "#888", fontWeight: 400, marginLeft: 8 }}>

@@ -383,7 +383,7 @@ export function ProvidersPage() {
       </div>
 
       {/* Right: Pricing table */}
-      <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", height: leftHeight, overflow: "hidden" }}>
+      <div style={{ width: 380, flexShrink: 0, height: leftHeight }}>
         <PricingTable provider={newProvider} pricingList={pricingList} loading={pricingLoading} />
       </div>
       </div>
