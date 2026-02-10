@@ -36,6 +36,7 @@ export default {
     loadError: "Failed to connect to gateway",
     noProviderError: "No LLM provider configured. Please go to LLM Providers page and add an API key.",
     timeoutError: "Request timed out. The model may be unavailable or the model ID may be incorrect.",
+    emoji: "Emoji",
   },
   rules: {
     title: "Rules",

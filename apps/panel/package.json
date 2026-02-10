@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@easyclaw/core": "workspace:*",
+    "emoji-picker-react": "^4.18.0",
     "i18next": "^25.8.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

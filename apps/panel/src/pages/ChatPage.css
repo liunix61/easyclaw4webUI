@@ -130,12 +130,51 @@
   line-height: 1.5;
   background: var(--color-bg);
   color: var(--color-text);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.chat-input-area textarea::-webkit-scrollbar {
+  display: none;
 }
 
 .chat-input-area textarea:focus {
   border-color: var(--color-primary);
   box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.12);
   outline: none;
+}
+
+.chat-emoji-wrapper {
+  position: relative;
+}
+
+.chat-emoji-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 40px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.chat-emoji-btn:hover {
+  color: var(--color-text);
+  background-color: var(--color-bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.chat-emoji-picker {
+  position: absolute;
+  bottom: 48px;
+  right: 0;
+  z-index: 100;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 
 .chat-status {

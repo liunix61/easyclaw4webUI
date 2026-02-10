@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
 import { fetchGatewayInfo, fetchProviderKeys } from "../api.js";
 import { GatewayChatClient } from "../lib/gateway-client.js";
 import type { GatewayEvent, GatewayHelloOk } from "../lib/gateway-client.js";
@@ -107,6 +108,8 @@ export function ChatPage() {
   const fetchLimitRef = useRef(FETCH_BATCH);
   const isFetchingRef = useRef(false);
   const shouldInstantScrollRef = useRef(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   // Stable refs so event handler closures always see the latest state
   const runIdRef = useRef(runId);
@@ -446,6 +449,38 @@ export function ChatPage() {
     el.style.height = Math.min(el.scrollHeight, 120) + "px";
   }
 
+  function handleEmojiClick(emojiData: EmojiClickData) {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const newDraft = draft.slice(0, start) + emojiData.emoji + draft.slice(end);
+      setDraft(newDraft);
+      // Restore cursor position after emoji insertion
+      requestAnimationFrame(() => {
+        const pos = start + emojiData.emoji.length;
+        textarea.selectionStart = pos;
+        textarea.selectionEnd = pos;
+        textarea.focus();
+      });
+    } else {
+      setDraft((prev) => prev + emojiData.emoji);
+    }
+    setShowEmojiPicker(false);
+  }
+
+  // Close emoji picker when clicking outside
+  useEffect(() => {
+    if (!showEmojiPicker) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(e.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showEmojiPicker]);
+
   const visibleMessages = messages.slice(Math.max(0, messages.length - visibleCount));
   const showHistoryEnd = allFetched && visibleCount >= messages.length && messages.length > 0;
   const isStreaming = runId !== null;
@@ -504,6 +539,26 @@ export function ChatPage() {
           placeholder={t("chat.placeholder")}
           rows={1}
         />
+        <div className="chat-emoji-wrapper" ref={emojiPickerRef}>
+          <button
+            className="chat-emoji-btn"
+            onClick={() => setShowEmojiPicker((v) => !v)}
+            title={t("chat.emoji")}
+            type="button"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+              <line x1="9" y1="9" x2="9.01" y2="9" />
+              <line x1="15" y1="9" x2="15.01" y2="9" />
+            </svg>
+          </button>
+          {showEmojiPicker && (
+            <div className="chat-emoji-picker">
+              <EmojiPicker onEmojiClick={handleEmojiClick} width={320} height={400} />
+            </div>
+          )}
+        </div>
         {isStreaming ? (
           <button className="btn btn-danger" onClick={handleStop}>
             {t("chat.stop")}

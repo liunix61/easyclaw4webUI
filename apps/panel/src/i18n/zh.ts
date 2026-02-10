@@ -36,6 +36,7 @@ export default {
     loadError: "无法连接到 Gateway",
     noProviderError: "未配置 LLM 提供商。请前往「LLM 模型」页面添加 API 密钥。",
     timeoutError: "请求超时。模型可能不可用，或模型 ID 不正确。",
+    emoji: "表情",
   },
   rules: {
     title: "规则",
