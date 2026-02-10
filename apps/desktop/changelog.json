@@ -1,5 +1,27 @@
 [
   {
+    "version": "1.1.1",
+    "date": "2026-02-10",
+    "en": [
+      "Volcengine STT voice pipeline integration",
+      "Region-aware update manifest for CDN routing",
+      "Pricing table: CNY support, chat images, sidebar logo & version display",
+      "\"What's New\" changelog modal after version updates",
+      "Chat emoji picker",
+      "API and telemetry endpoints migrated to dedicated subdomains",
+      "Fixed workspace redirect, browser config, permission grants, and provider URLs"
+    ],
+    "zh": [
+      "火山引擎 STT 语音识别接入",
+      "更新检查支持按地区选择 CDN 节点",
+      "价格表增强：人民币显示、聊天图片、侧边栏 Logo 和版本号",
+      "版本更新后弹出「新功能」更新日志",
+      "聊天输入框添加表情选择器",
+      "API 和遥测端点迁移到专用子域名",
+      "修复工作区重定向、浏览器配置、权限授予和服务商链接等问题"
+    ]
+  },
+  {
     "version": "1.1.0",
     "date": "2026-02-10",
     "en": [
