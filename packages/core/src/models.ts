@@ -121,11 +121,21 @@ export function providerSecretKey(provider: LLMProvider): string {
   return `${provider}-api-key`;
 }
 
+/** Per-million-token cost in USD for OpenClaw usage tracking. */
+export interface ModelCost {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+}
+
 /** A model configuration with provider and model ID. */
 export interface ModelConfig {
   provider: LLMProvider;
   modelId: string;
   displayName: string;
+  /** Cost in USD per million tokens. Converted from CNY at ~7.3 CNY/USD where applicable. */
+  cost?: ModelCost;
 }
 
 /** Known regions. */
@@ -135,46 +145,110 @@ export type Region = "us" | "eu" | "cn" | (string & {});
  * Extra models for providers not supported by OpenClaw.
  * These are our own additions that won't appear in OpenClaw's models.json.
  */
+// CNY → USD conversion rate used for cost estimates below.
+const CNY_USD = 7.0;
+const cny = (yuan: number) => Math.round((yuan / CNY_USD) * 100) / 100;
+const FREE_COST: ModelCost = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
+/**
+ * Extra models for providers not supported by OpenClaw.
+ * These are our own additions that won't appear in OpenClaw's models.json.
+ *
+ * Cost is in USD per million tokens, converted from CNY at ~7.3 CNY/USD.
+ */
 export const EXTRA_MODELS: Partial<Record<LLMProvider, ModelConfig[]>> = {
   volcengine: [
     {
       provider: "volcengine",
       modelId: "doubao-seed-1-8-251228",
       displayName: "Doubao Seed 1.8",
+      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
     },
     {
       provider: "volcengine",
       modelId: "doubao-seed-1-6-251015",
       displayName: "Doubao Seed 1.6",
+      cost: { input: cny(0.8), output: cny(8), cacheRead: 0, cacheWrite: 0 }, // ¥0.8/¥8
     },
     {
       provider: "volcengine",
       modelId: "doubao-seed-1-6-lite-251015",
       displayName: "Doubao Seed 1.6 Lite",
+      cost: { input: cny(0.4), output: cny(4), cacheRead: 0, cacheWrite: 0 }, // ¥0.4/¥4
     },
     {
       provider: "volcengine",
       modelId: "doubao-seed-1-6-flash-250828",
       displayName: "Doubao Seed 1.6 Flash",
+      cost: { input: cny(0.2), output: cny(2), cacheRead: 0, cacheWrite: 0 }, // ¥0.2/¥2
     },
   ],
   zhipu: [
-    { provider: "zhipu", modelId: "glm-4.7", displayName: "GLM-4.7" },
+    {
+      provider: "zhipu",
+      modelId: "glm-4.7",
+      displayName: "GLM-4.7",
+      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
+    },
     {
       provider: "zhipu",
       modelId: "glm-4.7-flash",
       displayName: "GLM-4.7-Flash",
+      cost: FREE_COST,
     },
-    { provider: "zhipu", modelId: "glm-4.6", displayName: "GLM-4.6" },
-    { provider: "zhipu", modelId: "glm-4.6v", displayName: "GLM-4.6V" },
-    { provider: "zhipu", modelId: "glm-4.5", displayName: "GLM-4.5" },
+    {
+      provider: "zhipu",
+      modelId: "glm-4.6",
+      displayName: "GLM-4.6",
+      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
+    },
+    {
+      provider: "zhipu",
+      modelId: "glm-4.6v",
+      displayName: "GLM-4.6V",
+      cost: { input: cny(2), output: cny(6), cacheRead: 0, cacheWrite: 0 }, // ¥2/¥6
+    },
+    {
+      provider: "zhipu",
+      modelId: "glm-4.5",
+      displayName: "GLM-4.5",
+      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
+    },
     {
       provider: "zhipu",
       modelId: "glm-4.5-flash",
       displayName: "GLM-4.5-Flash",
+      cost: FREE_COST,
     },
-    { provider: "zhipu", modelId: "glm-4.5-air", displayName: "GLM-4.5-Air" },
-    { provider: "zhipu", modelId: "glm-4.5v", displayName: "GLM-4.5V" },
+    {
+      provider: "zhipu",
+      modelId: "glm-4.5-air",
+      displayName: "GLM-4.5-Air",
+      cost: { input: cny(1), output: cny(8), cacheRead: 0, cacheWrite: 0 }, // ¥1/¥8
+    },
+    {
+      provider: "zhipu",
+      modelId: "glm-4.5v",
+      displayName: "GLM-4.5V",
+      cost: { input: cny(4), output: cny(12), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥12
+    },
+    {
+      provider: "zhipu",
+      modelId: "glm-4-plus",
+      displayName: "GLM-4 Plus",
+      cost: { input: cny(5), output: cny(5), cacheRead: 0, cacheWrite: 0 }, // ¥5/¥5
+    },
+    {
+      provider: "zhipu",
+      modelId: "glm-4-flash",
+      displayName: "GLM-4 Flash",
+      cost: FREE_COST,
+    },
   ],
 };
 
