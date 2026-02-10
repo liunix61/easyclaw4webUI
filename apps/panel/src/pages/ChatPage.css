@@ -113,7 +113,7 @@
   padding: 12px 48px;
   background-color: var(--color-bg);
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
 }
 
@@ -146,14 +146,16 @@
 
 .chat-emoji-wrapper {
   position: relative;
+  display: flex;
+  align-items: flex-end;
 }
 
 .chat-emoji-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border: none;
   background: none;
   color: var(--color-text-muted);
