@@ -205,6 +205,11 @@ app.whenReady().then(async () => {
   enableFileLogging();
   log.info("EasyClaw desktop starting");
 
+  // Show dock icon immediately. LSUIElement=true in Info.plist hides it by default
+  // (which also prevents child processes like the gateway from showing dock icons).
+  // We explicitly show it for the main process here.
+  app.dock?.show();
+
   // --- Device ID ---
   let deviceId: string;
   try {

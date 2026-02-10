@@ -51,7 +51,6 @@ export function WhatsNewModal({
         <button
           className="btn btn-primary"
           onClick={handleClose}
-          style={{ minWidth: 80 }}
         >
           {isZh ? "知道了" : "Got it"}
         </button>
