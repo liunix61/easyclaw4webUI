@@ -241,6 +241,7 @@ tbody td {
   display: flex;
   flex-direction: column;
   background-color: var(--color-bg-page);
+  overflow-y: auto;
 }
 
 .main-content > main {
@@ -254,7 +255,9 @@ tbody td {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  padding: 16px 48px 0;
+  padding: 12px 48px;
+  background-color: #f8f9fb;
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* ===== 6. Section Cards ===== */

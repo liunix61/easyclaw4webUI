@@ -79,7 +79,7 @@ export function Layout({
   const showBanner = updateInfo && !dismissed;
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <nav className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
         <h2 className="sidebar-brand">{t("common.brandName")}</h2>
         <ul style={{ listStyle: "none", padding: 0, margin: 0, flex: 1 }}>
