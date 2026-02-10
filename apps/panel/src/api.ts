@@ -510,25 +510,27 @@ export async function fetchPricing(
   appVersion: string,
   language: string,
 ): Promise<ProviderPricing[] | null> {
-  try {
-    const res = await fetch(PRICING_API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: `query($deviceId: String!, $platform: String!, $appVersion: String!, $language: String!) {
-          pricing(deviceId: $deviceId, platform: $platform, appVersion: $appVersion, language: $language) {
-            provider currency pricingUrl
-            models { modelId displayName inputPricePerMillion outputPricePerMillion note }
-          }
-        }`,
-        variables: { deviceId, platform, appVersion, language },
-      }),
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.data?.pricing ?? null;
-  } catch {
-    return null;
-  }
+  return cachedFetch("pricing", async () => {
+    try {
+      const res = await fetch(PRICING_API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: `query($deviceId: String!, $platform: String!, $appVersion: String!, $language: String!) {
+            pricing(deviceId: $deviceId, platform: $platform, appVersion: $appVersion, language: $language) {
+              provider currency pricingUrl
+              models { modelId displayName inputPricePerMillion outputPricePerMillion note }
+            }
+          }`,
+          variables: { deviceId, platform, appVersion, language },
+        }),
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.data?.pricing ?? null;
+    } catch {
+      return null;
+    }
+  }, 600_000); // 10min — pricing rarely changes during a session
 }

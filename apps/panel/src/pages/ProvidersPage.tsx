@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { PROVIDER_URLS, getDefaultModelForProvider } from "@easyclaw/core";
 import type { LLMProvider } from "@easyclaw/core";
@@ -37,6 +37,16 @@ export function ProvidersPage() {
   const [error, setError] = useState<{ key: string; detail?: string } | null>(null);
   const [pricingList, setPricingList] = useState<ProviderPricing[] | null>(null);
   const [pricingLoading, setPricingLoading] = useState(true);
+  const leftCardRef = useRef<HTMLDivElement>(null);
+  const [leftHeight, setLeftHeight] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const el = leftCardRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setLeftHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     loadData();
@@ -239,7 +249,7 @@ export function ProvidersPage() {
 
       {/* Section A: Add Key — left form + right pricing table */}
       <div style={{ display: "flex", gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div className="section-card" style={{ flex: 1, maxWidth: 680, minWidth: 320 }}>
+      <div ref={leftCardRef} className="section-card" style={{ flex: 1, maxWidth: 680, minWidth: 320 }}>
         <h3>{t("providers.addTitle")}</h3>
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, marginBottom: 4, color: "#555" }}>{t("onboarding.providerLabel")}</div>
@@ -373,7 +383,7 @@ export function ProvidersPage() {
       </div>
 
       {/* Right: Pricing table */}
-      <div style={{ width: 380, flexShrink: 0, position: "sticky", top: 24 }}>
+      <div style={{ width: 380, flexShrink: 0, display: "flex", flexDirection: "column", height: leftHeight, overflow: "hidden" }}>
         <PricingTable provider={newProvider} pricingList={pricingList} loading={pricingLoading} />
       </div>
       </div>

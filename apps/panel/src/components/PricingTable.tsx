@@ -19,8 +19,8 @@ export function PricingTable({
   const providerLabel = PROVIDER_LABELS[provider as LLMProvider] ?? provider;
 
   return (
-    <div className="section-card" style={{ padding: "16px 18px" }}>
-      <h4 style={{ margin: "0 0 4px 0", fontSize: 14 }}>
+    <div className="section-card" style={{ padding: "16px 18px", flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
+      <h4 style={{ margin: "0 0 4px 0", fontSize: 14, flexShrink: 0 }}>
         {providerLabel} — {t("providers.pricingTitle")}
         <span style={{ fontSize: 11, color: "#888", fontWeight: 400, marginLeft: 8 }}>
           {t("providers.pricingPerMillion")}
@@ -51,44 +51,46 @@ export function PricingTable({
       {!loading && data && (
         <>
           {data.currency !== "USD" && (
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: "#888", marginBottom: 8, flexShrink: 0 }}>
               {t("providers.pricingCurrency")}: {data.currency}
             </div>
           )}
-          <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
-            <thead>
-              <tr style={{ borderBottom: "1px solid #e0e0e0" }}>
-                <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 500, color: "#555" }}>
-                  {t("providers.pricingModel")}
-                </th>
-                <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 500, color: "#555", whiteSpace: "nowrap" }}>
-                  {t("providers.pricingInput")}
-                </th>
-                <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 500, color: "#555", whiteSpace: "nowrap" }}>
-                  {t("providers.pricingOutput")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.models.map((m) => (
-                <tr key={m.modelId} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                  <td style={{ padding: "5px 6px" }}>
-                    <div style={{ fontWeight: 500 }}>{m.displayName}</div>
-                    {m.note && (
-                      <div style={{ fontSize: 10, color: "#999", marginTop: 1 }}>{m.note}</div>
-                    )}
-                  </td>
-                  <td style={{ textAlign: "right", padding: "5px 6px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                    {m.inputPricePerMillion === "—" ? "—" : `${currencySymbol}${m.inputPricePerMillion}`}
-                  </td>
-                  <td style={{ textAlign: "right", padding: "5px 6px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
-                    {m.outputPricePerMillion === "—" ? "—" : `${currencySymbol}${m.outputPricePerMillion}`}
-                  </td>
+          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
+            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #e0e0e0" }}>
+                  <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 500, color: "#555" }}>
+                    {t("providers.pricingModel")}
+                  </th>
+                  <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 500, color: "#555", whiteSpace: "nowrap" }}>
+                    {t("providers.pricingInput")}
+                  </th>
+                  <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 500, color: "#555", whiteSpace: "nowrap" }}>
+                    {t("providers.pricingOutput")}
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <div style={{ marginTop: 6 }}>
+              </thead>
+              <tbody>
+                {data.models.map((m) => (
+                  <tr key={m.modelId} style={{ borderBottom: "1px solid #f0f0f0" }}>
+                    <td style={{ padding: "5px 6px" }}>
+                      <div style={{ fontWeight: 500 }}>{m.displayName}</div>
+                      {m.note && (
+                        <div style={{ fontSize: 10, color: "#999", marginTop: 1 }}>{m.note}</div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right", padding: "5px 6px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                      {m.inputPricePerMillion === "—" ? "—" : `${currencySymbol}${m.inputPricePerMillion}`}
+                    </td>
+                    <td style={{ textAlign: "right", padding: "5px 6px", fontFamily: "monospace", whiteSpace: "nowrap" }}>
+                      {m.outputPricePerMillion === "—" ? "—" : `${currencySymbol}${m.outputPricePerMillion}`}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: 6, flexShrink: 0 }}>
             <a
               href={data.pricingUrl}
               target="_blank"
