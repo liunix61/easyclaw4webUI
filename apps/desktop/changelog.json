@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.1.4",
+    "date": "2026-02-10",
+    "en": [
+      "macOS: clicking the dock icon now restores the window when hidden",
+      "Windows/Linux: clicking the tray icon toggles window visibility"
+    ],
+    "zh": [
+      "macOS：点击 Dock 图标可恢复已隐藏的窗口",
+      "Windows/Linux：点击托盘图标可切换窗口显示/隐藏"
+    ]
+  },
+  {
     "version": "1.1.3",
     "date": "2026-02-10",
     "en": [
