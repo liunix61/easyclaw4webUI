@@ -133,6 +133,8 @@ MANIFEST="$WEBSITE_DIR/update-manifest.json"
 HTML="$WEBSITE_DIR/index.html"
 RELEASE_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
+CN_MANIFEST="$WEBSITE_DIR/update-manifest-cn.json"
+
 R_VERSION="$VERSION" \
 R_DATE="$RELEASE_DATE" \
 R_DMG_NAME="$DMG_NAME" \
@@ -142,13 +144,14 @@ R_EXE_NAME="$EXE_NAME" \
 R_EXE_HASH="$EXE_HASH" \
 R_EXE_SIZE="$EXE_SIZE" \
 R_MANIFEST="$MANIFEST" \
+R_CN_MANIFEST="$CN_MANIFEST" \
 R_HTML="$HTML" \
 node -e '
   const fs = require("fs");
   const e = process.env;
   const enc = (n) => n.split("/").map(encodeURIComponent).join("/");
 
-  // --- Update manifest ---
+  // --- Update www manifest ---
   const manifest = JSON.parse(fs.readFileSync(e.R_MANIFEST, "utf-8"));
   manifest.latestVersion = e.R_VERSION;
   manifest.releaseDate = e.R_DATE;
@@ -163,6 +166,17 @@ node -e '
     manifest.downloads.win.size = Number(e.R_EXE_SIZE);
   }
   fs.writeFileSync(e.R_MANIFEST, JSON.stringify(manifest, null, 2) + "\n");
+
+  // --- Update CN manifest (same data, cn.easy-claw.com URLs) ---
+  const cn = JSON.parse(JSON.stringify(manifest));
+  if (cn.downloads.mac) {
+    cn.downloads.mac.url = cn.downloads.mac.url.replace("https://www.easy-claw.com/", "https://cn.easy-claw.com/");
+  }
+  if (cn.downloads.win) {
+    cn.downloads.win.url = cn.downloads.win.url.replace("https://www.easy-claw.com/", "https://cn.easy-claw.com/");
+  }
+  cn.releaseNotes = "v" + e.R_VERSION + " release.";
+  fs.writeFileSync(e.R_CN_MANIFEST, JSON.stringify(cn, null, 2) + "\n");
 
   // --- Update index.html ---
   let html = fs.readFileSync(e.R_HTML, "utf-8");
@@ -213,4 +227,5 @@ info ""
 info "  Next steps:"
 info "    1. git add && git commit && git push"
 info "    2. On server: git pull && docker compose restart nginx"
+info "    3. On server: ./scripts/cdn-refresh.sh $VERSION"
 info "==============================================="
