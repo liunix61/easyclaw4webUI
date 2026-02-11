@@ -24,7 +24,7 @@ import { RemoteTelemetryClient } from "@easyclaw/telemetry";
 
 // Initialize the client
 const client = new RemoteTelemetryClient({
-  endpoint: "https://telemetry.easyclaw.com/api/telemetry/",
+  endpoint: "https://t.easy-claw.com/",
   enabled: true,
   version: "0.1.0",
   platform: process.platform,
@@ -150,7 +150,7 @@ app.on("ready", () => {
 
   if (telemetryEnabled) {
     telemetryClient = new RemoteTelemetryClient({
-      endpoint: "https://telemetry.easyclaw.com/api/telemetry/",
+      endpoint: "https://t.easy-claw.com/",
       enabled: true,
       version: app.getVersion(),
       platform: process.platform,
