@@ -224,6 +224,8 @@ export interface WriteGatewayConfigOptions {
   /** Override path to the file permissions plugin .mjs entry file.
    *  Used in packaged Electron apps where the monorepo root doesn't exist. */
   filePermissionsPluginPath?: string;
+  /** Enable the google-gemini-cli-auth plugin (bundled in OpenClaw extensions). */
+  enableGeminiCliAuth?: boolean;
   /** Skip OpenClaw bootstrap (prevents creating template files like AGENTS.md on first startup). */
   skipBootstrap?: boolean;
   /** Agent workspace directory. Written as agents.defaults.workspace so OpenClaw stores
@@ -398,7 +400,7 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
   }
 
   // Plugins configuration
-  if (options.plugins !== undefined || options.enableFilePermissions !== undefined) {
+  if (options.plugins !== undefined || options.enableFilePermissions !== undefined || options.enableGeminiCliAuth !== undefined) {
     const existingPlugins =
       typeof config.plugins === "object" && config.plugins !== null
         ? (config.plugins as Record<string, unknown>)
@@ -449,6 +451,18 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
       merged.entries = {
         ...existingEntries,
         "easyclaw-file-permissions": { enabled: options.enableFilePermissions },
+      };
+    }
+
+    // Enable google-gemini-cli-auth plugin (bundled in OpenClaw extensions/)
+    if (options.enableGeminiCliAuth !== undefined) {
+      const existingEntries =
+        typeof merged.entries === "object" && merged.entries !== null
+          ? (merged.entries as Record<string, unknown>)
+          : {};
+      merged.entries = {
+        ...existingEntries,
+        "google-gemini-cli-auth": { enabled: options.enableGeminiCliAuth },
       };
     }
 

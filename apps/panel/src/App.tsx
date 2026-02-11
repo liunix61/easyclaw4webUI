@@ -139,10 +139,15 @@ export function App() {
     return <OnboardingPage onComplete={handleOnboardingComplete} />;
   }
 
-  const PageComponent = PAGES[currentPath] ?? ChatPage;
+  const OtherPage = currentPath !== "/" ? PAGES[currentPath] : null;
   return (
     <Layout currentPath={currentPath} onNavigate={navigate}>
-      <PageComponent />
+      {/* Keep ChatPage always mounted so its WebSocket connection and pending
+          message state survive navigation to other pages (e.g. ProvidersPage). */}
+      <div style={{ display: currentPath === "/" ? "contents" : "none" }}>
+        <ChatPage />
+      </div>
+      {OtherPage && <OtherPage />}
       <WhatsNewModal
         isOpen={showWhatsNew}
         onClose={() => setShowWhatsNew(false)}

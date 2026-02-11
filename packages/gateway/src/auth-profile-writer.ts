@@ -7,13 +7,25 @@ const log = createLogger("gateway:auth-profile");
 const AUTH_PROFILE_FILENAME = "auth-profiles.json";
 const DEFAULT_AGENT_ID = "main";
 
+type ApiKeyProfile = { type: "api_key"; provider: string; key: string };
+type OAuthProfile = {
+  type: "oauth";
+  provider: string;
+  access: string;
+  refresh: string;
+  expires: number;
+  email?: string;
+  projectId: string;
+};
+type AuthProfileCredential = ApiKeyProfile | OAuthProfile;
+
 /**
  * Minimal auth-profile store structure — matches OpenClaw's AuthProfileStore.
- * We only use the `api_key` credential type.
+ * Supports both api_key and oauth credential types.
  */
 interface AuthProfileStore {
   version: number;
-  profiles: Record<string, { type: "api_key"; provider: string; key: string }>;
+  profiles: Record<string, AuthProfileCredential>;
   order?: Record<string, string[]>;
 }
 
@@ -109,7 +121,12 @@ export async function syncAllAuthProfiles(
   stateDir: string,
   storage: {
     providerKeys: {
-      getAll(): Array<{ id: string; provider: string; isDefault: boolean }>;
+      getAll(): Array<{
+        id: string;
+        provider: string;
+        isDefault: boolean;
+        authType?: string;
+      }>;
     };
   },
   secretStore: { get(key: string): Promise<string | null> },
@@ -121,20 +138,114 @@ export async function syncAllAuthProfiles(
   const activeKeys = allKeys.filter((k) => k.isDefault);
 
   for (const key of activeKeys) {
-    const apiKey = await secretStore.get(`provider-key-${key.id}`);
-    if (apiKey) {
-      const profileId = `${key.provider}:active`;
-      store.profiles[profileId] = {
-        type: "api_key",
-        provider: key.provider,
-        key: apiKey,
-      };
-      store.order![key.provider] = [profileId];
+    if (key.authType === "oauth") {
+      // OAuth entry: read credential JSON from Keychain
+      const credJson = await secretStore.get(`oauth-cred-${key.id}`);
+      if (credJson) {
+        try {
+          const cred = JSON.parse(credJson) as {
+            access: string;
+            refresh: string;
+            expires: number;
+            email?: string;
+            projectId: string;
+          };
+          const profileId = `${key.provider}:${cred.email ?? "default"}`;
+          store.profiles[profileId] = {
+            type: "oauth",
+            provider: key.provider,
+            access: cred.access,
+            refresh: cred.refresh,
+            expires: cred.expires,
+            email: cred.email,
+            projectId: cred.projectId,
+          };
+          store.order![key.provider] = [profileId];
+        } catch {
+          log.warn(`Failed to parse OAuth credential for ${key.provider} (key ${key.id})`);
+        }
+      }
+    } else {
+      // API key entry: existing behavior
+      const apiKey = await secretStore.get(`provider-key-${key.id}`);
+      if (apiKey) {
+        const profileId = `${key.provider}:active`;
+        store.profiles[profileId] = {
+          type: "api_key",
+          provider: key.provider,
+          key: apiKey,
+        };
+        store.order![key.provider] = [profileId];
+      }
     }
   }
 
   writeStore(filePath, store);
   log.info(`Synced ${Object.keys(store.profiles).length} auth profile(s)`);
+}
+
+/**
+ * Sync back OAuth credentials from auth-profiles.json to Keychain.
+ *
+ * OpenClaw may refresh OAuth access tokens during runtime. Before shutdown,
+ * we read the (possibly refreshed) tokens from auth-profiles.json and write
+ * them back to Keychain so the latest tokens survive across restarts.
+ *
+ * Call this BEFORE clearAllAuthProfiles().
+ */
+export async function syncBackOAuthCredentials(
+  stateDir: string,
+  storage: {
+    providerKeys: {
+      getAll(): Array<{
+        id: string;
+        provider: string;
+        isDefault: boolean;
+        authType?: string;
+      }>;
+    };
+  },
+  secretStore: {
+    get(key: string): Promise<string | null>;
+    set(key: string, value: string): Promise<void>;
+  },
+): Promise<void> {
+  const filePath = resolveAuthProfilePath(stateDir);
+  const store = readStore(filePath);
+
+  const oauthKeys = storage.providerKeys
+    .getAll()
+    .filter((k) => k.authType === "oauth" && k.isDefault);
+
+  let synced = 0;
+  for (const key of oauthKeys) {
+    // Find the matching profile in auth-profiles.json
+    const matchingProfile = Object.values(store.profiles).find(
+      (p) => p.type === "oauth" && p.provider === key.provider,
+    ) as OAuthProfile | undefined;
+
+    if (!matchingProfile) continue;
+
+    // Read current credential from Keychain
+    const currentJson = await secretStore.get(`oauth-cred-${key.id}`);
+    const updated = JSON.stringify({
+      access: matchingProfile.access,
+      refresh: matchingProfile.refresh,
+      expires: matchingProfile.expires,
+      email: matchingProfile.email,
+      projectId: matchingProfile.projectId,
+    });
+
+    // Only write back if different (avoids unnecessary Keychain writes)
+    if (currentJson !== updated) {
+      await secretStore.set(`oauth-cred-${key.id}`, updated);
+      synced++;
+    }
+  }
+
+  if (synced > 0) {
+    log.info(`Synced back ${synced} refreshed OAuth credential(s) to Keychain`);
+  }
 }
 
 /**

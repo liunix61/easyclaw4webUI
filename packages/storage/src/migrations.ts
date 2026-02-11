@@ -87,4 +87,11 @@ export const migrations: Migration[] = [
         WHERE read_paths LIKE '%"*"%' OR write_paths LIKE '%"*"%';
     `,
   },
+  {
+    id: 6,
+    name: "add_auth_type_to_provider_keys",
+    sql: `
+      ALTER TABLE provider_keys ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'api_key';
+    `,
+  },
 ];

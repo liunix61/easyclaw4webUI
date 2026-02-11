@@ -1,6 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import EmojiPicker, { type EmojiClickData } from "emoji-picker-react";
+import { stripReasoningTagsFromText } from "@openclaw/reasoning-tags";
 import { fetchGatewayInfo, fetchProviderKeys, trackEvent } from "../api.js";
 import { GatewayChatClient } from "../lib/gateway-client.js";
 import type { GatewayEvent, GatewayHelloOk } from "../lib/gateway-client.js";
@@ -34,6 +35,10 @@ const FETCH_BATCH = 200;
 function cleanMessageText(text: string): string {
   // Remove "Conversation info (untrusted metadata):" and its JSON block
   let cleaned = text.replace(/Conversation info \(untrusted metadata\):\s*\{[\s\S]*?\}\s*/g, "").trim();
+
+  // Strip reasoning/thinking tags (<think>, <thinking>, <thought>, <antthinking>, <final>)
+  // using OpenClaw's battle-tested implementation that respects code blocks
+  cleaned = stripReasoningTagsFromText(cleaned, { mode: "preserve", trim: "start" });
 
   // Detect audio transcript pattern:
   //   [Audio] User text: [Telegram ... ] <media:audio>\nTranscript: 实际文本
@@ -87,6 +92,26 @@ function formatMessage(text: string): React.ReactNode[] {
  * Extract plain text from gateway message content blocks.
  */
 const NO_PROVIDER_RE = /no\s+(llm\s+)?provider|no\s+api\s*key|provider\s+not\s+configured|key\s+not\s+(found|configured)/i;
+
+/**
+ * Map OpenClaw English error messages to i18n keys.
+ * Pattern order matters — first match wins.
+ */
+const ERROR_I18N_MAP: Array<{ pattern: RegExp; key: string }> = [
+  { pattern: NO_PROVIDER_RE, key: "chat.noProviderError" },
+  { pattern: /temporarily overloaded|rate.?limit/i, key: "chat.errorRateLimit" },
+  { pattern: /billing error|run out of credits|insufficient balance/i, key: "chat.errorBilling" },
+  { pattern: /timed?\s*out/i, key: "chat.errorTimeout" },
+  { pattern: /context overflow|prompt too large|context length exceeded/i, key: "chat.errorContextOverflow" },
+  { pattern: /unauthorized|invalid.*(?:key|token)|authentication/i, key: "chat.errorAuth" },
+];
+
+function localizeError(raw: string, t: (key: string) => string): string {
+  for (const { pattern, key } of ERROR_I18N_MAP) {
+    if (pattern.test(raw)) return t(key);
+  }
+  return raw;
+}
 
 function extractText(content: unknown): string {
   if (typeof content === "string") return content;
@@ -165,6 +190,7 @@ export function ChatPage() {
   const allFetchedRef = useRef(allFetched);
   allFetchedRef.current = allFetched;
   const sendTimeRef = useRef<number>(0);
+  const needsDisconnectErrorRef = useRef(false);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -305,7 +331,7 @@ export function ChatPage() {
         // Surface error to user if we're waiting for a response
         if (runIdRef.current) {
           const raw = payload.errorMessage ?? t("chat.unknownError");
-          const errText = NO_PROVIDER_RE.test(raw) ? t("chat.noProviderError") : raw;
+          const errText = localizeError(raw, t);
           setMessages((prev) => [...prev, { role: "assistant", text: `⚠ ${errText}`, timestamp: Date.now() }]);
           setStreaming(null);
           setRunId(null);
@@ -345,7 +371,7 @@ export function ChatPage() {
       case "error": {
         console.error("[chat] error event:", payload.errorMessage ?? "unknown error", "runId:", payload.runId);
         const raw = payload.errorMessage ?? t("chat.unknownError");
-        const errText = NO_PROVIDER_RE.test(raw) ? t("chat.noProviderError") : raw;
+        const errText = localizeError(raw, t);
         setMessages((prev) => [...prev, { role: "assistant", text: `⚠ ${errText}`, timestamp: Date.now() }]);
         setStreaming(null);
         setRunId(null);
@@ -402,7 +428,18 @@ export function ChatPage() {
             const mainKey = hello.snapshot?.sessionDefaults?.mainSessionKey;
             if (mainKey) sessionKeyRef.current = mainKey;
             setConnectionState("connected");
-            loadHistory(client);
+            loadHistory(client).then(() => {
+              // Show deferred disconnect error AFTER history is loaded,
+              // otherwise loadHistory's setMessages would overwrite the error.
+              if (needsDisconnectErrorRef.current) {
+                needsDisconnectErrorRef.current = false;
+                setMessages((prev) => [...prev, {
+                  role: "assistant",
+                  text: `⚠ ${t("chat.disconnectedError")}`,
+                  timestamp: Date.now(),
+                }]);
+              }
+            });
             // Fetch agent display name
             client.request<{ name?: string }>("agent.identity.get", {
               sessionKey: sessionKeyRef.current,
@@ -411,7 +448,22 @@ export function ChatPage() {
             }).catch(() => {});
           },
           onDisconnected: () => {
-            if (!cancelled) setConnectionState("connecting");
+            if (cancelled) return;
+            setConnectionState("connecting");
+            const wasWaiting = !!runIdRef.current;
+            // If streaming was in progress, save partial text
+            setStreaming((current) => {
+              if (current) {
+                setMessages((prev) => [...prev, { role: "assistant", text: current, timestamp: Date.now() }]);
+              }
+              return null;
+            });
+            setRunId(null);
+            // Defer error display: auto-reconnect calls loadHistory which
+            // overwrites messages. The ref is checked after loadHistory completes.
+            if (wasWaiting) {
+              needsDisconnectErrorRef.current = true;
+            }
           },
           onEvent: handleEvent,
         });
@@ -499,7 +551,7 @@ export function ChatPage() {
     clientRef.current.request("chat.send", params).catch((err) => {
       // RPC-level failure — clear runId so UI doesn't get stuck in streaming mode
       const raw = (err as Error).message || t("chat.sendError");
-      const errText = NO_PROVIDER_RE.test(raw) ? t("chat.noProviderError") : raw;
+      const errText = localizeError(raw, t);
       setMessages((prev) => [...prev, { role: "assistant", text: `⚠ ${errText}`, timestamp: Date.now() }]);
       setStreaming(null);
       setRunId(null);
@@ -678,7 +730,7 @@ export function ChatPage() {
           )}
           {streaming !== null && (
             <div className="chat-bubble chat-bubble-assistant chat-streaming-cursor">
-              {formatMessage(streaming)}
+              {formatMessage(cleanMessageText(streaming))}
             </div>
           )}
           <div ref={messagesEndRef} />

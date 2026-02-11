@@ -123,6 +123,7 @@ export interface ProviderKeyEntry {
   model: string;
   isDefault: boolean;
   proxyUrl?: string;
+  authType?: "api_key" | "oauth";
   createdAt: string;
   updatedAt: string;
 }
@@ -169,6 +170,30 @@ export async function activateProviderKey(id: string): Promise<void> {
 export async function deleteProviderKey(id: string): Promise<void> {
   await fetchJson("/provider-keys/" + id, { method: "DELETE" });
   invalidateCache("provider-keys");
+}
+
+// --- OAuth Flow ---
+
+export async function startOAuthFlow(
+  provider: string,
+): Promise<{ email?: string; tokenPreview?: string; providerKeyId?: string; provider?: string }> {
+  const result = await fetchJson<{ ok: boolean; email?: string; tokenPreview?: string; providerKeyId?: string; provider?: string }>(
+    "/oauth/start",
+    { method: "POST", body: JSON.stringify({ provider }) },
+  );
+  return result;
+}
+
+export async function saveOAuthFlow(
+  provider: string,
+  options: { proxyUrl?: string; label?: string; model?: string },
+): Promise<{ providerKeyId: string; email?: string; provider: string }> {
+  const result = await fetchJson<{ ok: boolean; providerKeyId: string; email?: string; provider: string }>(
+    "/oauth/save",
+    { method: "POST", body: JSON.stringify({ provider, ...options }) },
+  );
+  invalidateCache("provider-keys");
+  return result;
 }
 
 // --- Model Catalog ---

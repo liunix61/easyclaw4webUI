@@ -14,6 +14,9 @@ const CHINA_FIRST_PROVIDERS = [
   "xiaomi",
 ];
 
+/** Extra provider IDs appended after a divider (e.g. OAuth providers). */
+const OAUTH_PROVIDERS = ["google-gemini-cli"];
+
 export function ProviderSelect({
   value,
   onChange,
@@ -97,6 +100,37 @@ export function ProviderSelect({
           }}
         >
           {sortedProviders.map((p) => (
+            <button
+              type="button"
+              key={p}
+              onClick={() => {
+                onChange(p);
+                setOpen(false);
+              }}
+              style={{
+                display: "block",
+                width: "100%",
+                padding: "8px 12px",
+                border: "none",
+                borderBottom: "1px solid #f0f0f0",
+                backgroundColor: p === value ? "#e3f2fd" : "transparent",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 500 }}>
+                {t(`providers.label_${p}`)}
+              </div>
+              <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+                {t(`providers.desc_${p}`)}
+              </div>
+            </button>
+          ))}
+          {/* OAuth providers section */}
+          <div style={{ padding: "6px 12px", fontSize: 11, color: "#999", fontWeight: 600, borderTop: "1px solid #e0e0e0", backgroundColor: "#fafafa" }}>
+            {t("providers.oauthSectionTitle")}
+          </div>
+          {OAUTH_PROVIDERS.map((p) => (
             <button
               type="button"
               key={p}

@@ -593,6 +593,12 @@ export interface PanelServerOptions {
   onPermissionsChange?: () => void;
   /** Callback fired when a channel account is created or updated. */
   onChannelConfigured?: (channelId: string) => void;
+  /** Callback to initiate an OAuth flow for a provider (e.g. google-gemini-cli). */
+  onOAuthFlow?: (provider: string) => Promise<{ providerKeyId: string; email?: string; provider: string }>;
+  /** Callback to acquire OAuth tokens (step 1: opens browser, returns token preview). */
+  onOAuthAcquire?: (provider: string) => Promise<{ email?: string; tokenPreview: string }>;
+  /** Callback to validate + save acquired OAuth tokens (step 2: validates through proxy, creates provider key). */
+  onOAuthSave?: (provider: string, options: { proxyUrl?: string; label?: string; model?: string }) => Promise<{ providerKeyId: string; email?: string; provider: string }>;
   /** Callback to track a telemetry event (relays to RemoteTelemetryClient in main process). */
   onTelemetryTrack?: (eventType: string, metadata?: Record<string, unknown>) => void;
   /** Override path to the vendored OpenClaw directory (for packaged app). */
@@ -789,7 +795,7 @@ async function syncActiveKey(
 export function startPanelServer(options: PanelServerOptions): Server {
   const port = options.port ?? 3210;
   const distDir = resolve(options.panelDistDir);
-  const { storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, onTelemetryTrack, vendorDir, deviceId, getUpdateResult, getGatewayInfo, changelogPath } = options;
+  const { storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, onOAuthFlow, onOAuthAcquire, onOAuthSave, onTelemetryTrack, vendorDir, deviceId, getUpdateResult, getGatewayInfo, changelogPath } = options;
 
   // Read changelog.json once at startup (cached in closure)
   let changelogEntries: unknown[] = [];
@@ -836,7 +842,7 @@ export function startPanelServer(options: PanelServerOptions): Server {
       }
 
       try {
-        await handleApiRoute(req, res, url, pathname, storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, onTelemetryTrack, vendorDir, deviceId, getUpdateResult, getGatewayInfo);
+        await handleApiRoute(req, res, url, pathname, storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, onOAuthFlow, onOAuthAcquire, onOAuthSave, onTelemetryTrack, vendorDir, deviceId, getUpdateResult, getGatewayInfo);
       } catch (err) {
         log.error("API error:", err);
         sendJson(res, 500, { error: "Internal server error" });
@@ -887,6 +893,9 @@ async function handleApiRoute(
   onSttChange?: () => void,
   onPermissionsChange?: () => void,
   onChannelConfigured?: (channelId: string) => void,
+  onOAuthFlow?: (provider: string) => Promise<{ providerKeyId: string; email?: string; provider: string }>,
+  onOAuthAcquire?: (provider: string) => Promise<{ email?: string; tokenPreview: string }>,
+  onOAuthSave?: (provider: string, options: { proxyUrl?: string; label?: string; model?: string }) => Promise<{ providerKeyId: string; email?: string; provider: string }>,
   onTelemetryTrack?: (eventType: string, metadata?: Record<string, unknown>) => void,
   vendorDir?: string,
   deviceId?: string,
@@ -1001,13 +1010,17 @@ async function handleApiRoute(
       masked[key] = value;
     }
 
-    // Check the secret store for API keys and report as "configured" (never expose actual keys)
+    // Report "configured" for the active provider if it has any key (never expose actual keys).
+    // Keys may exist in: (a) legacy secret store entry "${provider}-api-key",
+    // (b) provider_keys table (API key or OAuth).
     const provider = settings["llm-provider"];
     if (provider) {
       const secretKey = `${provider}-api-key`;
-      const keyValue = await secretStore.get(secretKey);
-      const hasKey = keyValue !== null && keyValue !== "";
-      if (hasKey) {
+      const legacyKey = await secretStore.get(secretKey);
+      const hasLegacyKey = legacyKey !== null && legacyKey !== "";
+      const hasProviderKey = storage.providerKeys.getAll()
+        .some((k) => k.provider === provider);
+      if (hasLegacyKey || hasProviderKey) {
         masked[secretKey] = "configured";
       }
     }
@@ -1986,6 +1999,67 @@ async function handleApiRoute(
     } catch (error) {
       log.error("Failed to load usage data", error);
       sendJson(res, 200, emptyUsageSummary());
+    }
+    return;
+  }
+
+  // --- OAuth Flow ---
+  if (pathname === "/api/oauth/start" && req.method === "POST") {
+    const body = (await parseBody(req)) as { provider?: string };
+    if (!body.provider) {
+      sendJson(res, 400, { error: "Missing required field: provider" });
+      return;
+    }
+    // Prefer the new two-step flow (acquire only, no save)
+    if (onOAuthAcquire) {
+      try {
+        const result = await onOAuthAcquire(body.provider);
+        sendJson(res, 200, { ok: true, ...result });
+      } catch (err) {
+        log.error("OAuth acquire failed:", err);
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
+      return;
+    }
+    // Fallback: old one-step flow
+    if (!onOAuthFlow) {
+      sendJson(res, 501, { error: "OAuth flow not available" });
+      return;
+    }
+    try {
+      const result = await onOAuthFlow(body.provider);
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      log.error("OAuth flow failed:", err);
+      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
+    return;
+  }
+
+  // OAuth save: validate acquired token + create provider key
+  if (pathname === "/api/oauth/save" && req.method === "POST") {
+    const body = (await parseBody(req)) as { provider?: string; proxyUrl?: string; label?: string; model?: string };
+    if (!body.provider) {
+      sendJson(res, 400, { error: "Missing required field: provider" });
+      return;
+    }
+    if (!onOAuthSave) {
+      sendJson(res, 501, { error: "OAuth save not available" });
+      return;
+    }
+    try {
+      const result = await onOAuthSave(body.provider, {
+        proxyUrl: body.proxyUrl,
+        label: body.label,
+        model: body.model,
+      });
+      sendJson(res, 200, { ok: true, ...result });
+    } catch (err) {
+      log.error("OAuth save failed:", err);
+      const message = err instanceof Error ? err.message : String(err);
+      // Return 422 for validation errors (token invalid/expired)
+      const status = message.includes("Invalid") || message.includes("expired") || message.includes("validation") ? 422 : 500;
+      sendJson(res, status, { error: message });
     }
     return;
   }

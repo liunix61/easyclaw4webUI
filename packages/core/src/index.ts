@@ -6,6 +6,7 @@ export type {
   ChannelConfig,
   PermissionConfig,
   ProviderKeyEntry,
+  ProviderKeyAuthType,
   EasyClawConfig,
   SttProvider,
   SttSettings,

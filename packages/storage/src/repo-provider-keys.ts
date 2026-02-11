@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { ProviderKeyEntry } from "@easyclaw/core";
+import type { ProviderKeyEntry, ProviderKeyAuthType } from "@easyclaw/core";
 
 interface ProviderKeyRow {
   id: string;
@@ -8,6 +8,7 @@ interface ProviderKeyRow {
   model: string;
   is_default: number;
   proxy_base_url: string | null;
+  auth_type: string;
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +21,7 @@ function rowToEntry(row: ProviderKeyRow): ProviderKeyEntry {
     model: row.model,
     isDefault: row.is_default === 1,
     proxyBaseUrl: row.proxy_base_url,
+    authType: (row.auth_type as ProviderKeyAuthType) ?? "api_key",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -32,7 +34,7 @@ export class ProviderKeysRepository {
     const now = new Date().toISOString();
     this.db
       .prepare(
-        "INSERT INTO provider_keys (id, provider, label, model, is_default, proxy_base_url, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO provider_keys (id, provider, label, model, is_default, proxy_base_url, auth_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         entry.id,
@@ -41,6 +43,7 @@ export class ProviderKeysRepository {
         entry.model,
         entry.isDefault ? 1 : 0,
         entry.proxyBaseUrl ?? null,
+        entry.authType ?? "api_key",
         now,
         now,
       );
@@ -78,7 +81,7 @@ export class ProviderKeysRepository {
 
   update(
     id: string,
-    fields: Partial<Pick<ProviderKeyEntry, "label" | "model" | "isDefault" | "proxyBaseUrl">>,
+    fields: Partial<Pick<ProviderKeyEntry, "label" | "model" | "isDefault" | "proxyBaseUrl" | "authType">>,
   ): ProviderKeyEntry | undefined {
     const existing = this.getById(id);
     if (!existing) return undefined;
@@ -89,18 +92,20 @@ export class ProviderKeysRepository {
       model: fields.model ?? existing.model,
       isDefault: fields.isDefault !== undefined ? fields.isDefault : existing.isDefault,
       proxyBaseUrl: fields.proxyBaseUrl !== undefined ? fields.proxyBaseUrl : existing.proxyBaseUrl,
+      authType: fields.authType ?? existing.authType,
       updatedAt: new Date().toISOString(),
     };
 
     this.db
       .prepare(
-        "UPDATE provider_keys SET label = ?, model = ?, is_default = ?, proxy_base_url = ?, updated_at = ? WHERE id = ?",
+        "UPDATE provider_keys SET label = ?, model = ?, is_default = ?, proxy_base_url = ?, auth_type = ?, updated_at = ? WHERE id = ?",
       )
       .run(
         updated.label,
         updated.model,
         updated.isDefault ? 1 : 0,
         updated.proxyBaseUrl ?? null,
+        updated.authType,
         updated.updatedAt,
         id,
       );

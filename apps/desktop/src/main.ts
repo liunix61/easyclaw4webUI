@@ -10,12 +10,17 @@ import {
   buildGatewayEnv,
   readExistingConfig,
   syncAllAuthProfiles,
+  syncBackOAuthCredentials,
   clearAllAuthProfiles,
   DEFAULT_GATEWAY_PORT,
   buildExtraProviderConfigs,
+  acquireGeminiOAuthToken,
+  saveGeminiOAuthCredentials,
+  validateGeminiAccessToken,
 } from "@easyclaw/gateway";
+import type { OAuthFlowResult, AcquiredOAuthCredentials } from "@easyclaw/gateway";
 import type { GatewayState } from "@easyclaw/gateway";
-import { resolveModelConfig, ALL_PROVIDERS, getDefaultModelForProvider, providerSecretKey, reconstructProxyUrl } from "@easyclaw/core";
+import { resolveModelConfig, ALL_PROVIDERS, getDefaultModelForProvider, providerSecretKey, reconstructProxyUrl, parseProxyUrl } from "@easyclaw/core";
 import type { LLMProvider } from "@easyclaw/core";
 import { createStorage } from "@easyclaw/storage";
 import { createSecretStore } from "@easyclaw/secrets";
@@ -362,12 +367,20 @@ app.whenReady().then(async () => {
     ? join(process.resourcesPath, "file-permissions-plugin", "easyclaw-file-permissions.mjs")
     : undefined;
 
+  // Temporary storage for pending OAuth credentials (between acquire and save steps)
+  let pendingOAuthCreds: AcquiredOAuthCredentials | null = null;
+
+  // Check if there's an active Gemini OAuth key — if so, enable the plugin
+  const hasGeminiOAuth = storage.providerKeys.getAll()
+    .some((k) => k.provider === "google-gemini-cli" && k.authType === "oauth" && k.isDefault);
+
   writeGatewayConfig({
     configPath,
     gatewayPort: DEFAULT_GATEWAY_PORT,
     enableChatCompletions: true,
     commandsRestart: true,
     enableFilePermissions: true,
+    enableGeminiCliAuth: hasGeminiOAuth,
     skipBootstrap: false,
     filePermissionsPluginPath,
     defaultModel: {
@@ -867,6 +880,64 @@ app.whenReady().then(async () => {
         log.error("Failed to handle permissions change:", err);
       });
     },
+    onOAuthAcquire: async (provider: string): Promise<{ email?: string; tokenPreview: string }> => {
+      const acquired = await acquireGeminiOAuthToken({
+        openUrl: (url) => shell.openExternal(url),
+        onStatusUpdate: (msg) => log.info(`OAuth: ${msg}`),
+      });
+      // Store credentials temporarily until onOAuthSave is called
+      pendingOAuthCreds = acquired;
+      log.info(`OAuth acquired for ${provider}, email=${acquired.email ?? "(none)"}`);
+      return { email: acquired.email, tokenPreview: acquired.tokenPreview };
+    },
+    onOAuthSave: async (provider: string, options: { proxyUrl?: string; label?: string; model?: string }): Promise<OAuthFlowResult> => {
+      if (!pendingOAuthCreds) {
+        throw new Error("No pending OAuth credentials. Please sign in first.");
+      }
+      const creds = pendingOAuthCreds;
+
+      // Validate access token (optionally through proxy)
+      const validation = await validateGeminiAccessToken(creds.credentials.access, options.proxyUrl, creds.credentials.projectId);
+      if (!validation.valid) {
+        throw new Error(validation.error || "Token validation failed");
+      }
+
+      // Parse proxy URL if provided
+      let proxyBaseUrl: string | null = null;
+      let proxyCredentials: string | null = null;
+      if (options.proxyUrl?.trim()) {
+        const proxyConfig = parseProxyUrl(options.proxyUrl.trim());
+        proxyBaseUrl = proxyConfig.baseUrl;
+        if (proxyConfig.hasAuth && proxyConfig.credentials) {
+          proxyCredentials = proxyConfig.credentials;
+        }
+      }
+
+      // Save credentials + create provider key
+      const result = await saveGeminiOAuthCredentials(creds.credentials, storage, secretStore, {
+        proxyBaseUrl,
+        proxyCredentials,
+        label: options.label,
+        model: options.model,
+      });
+      pendingOAuthCreds = null;
+
+      // Enable plugin + sync auth profiles + rewrite config
+      await syncAllAuthProfiles(stateDir, storage, secretStore);
+      await writeProxyRouterConfig(storage, secretStore);
+      writeGatewayConfig({
+        configPath,
+        enableGeminiCliAuth: true,
+        extraProviders: buildExtraProviderConfigs(),
+      });
+      // Restart gateway to pick up new plugin + auth profile
+      await launcher.stop();
+      await launcher.start();
+      connectRpcClient().catch((err) => {
+        log.error("Failed to reconnect RPC after OAuth save:", err);
+      });
+      return result;
+    },
     onChannelConfigured: (channelId) => {
       log.info(`Channel configured: ${channelId}`);
       telemetryClient?.track("channel.configured", {
@@ -915,6 +986,13 @@ app.whenReady().then(async () => {
   // Cleanup on quit
   app.on("before-quit", async () => {
     isQuitting = true;
+
+    // Sync back any refreshed OAuth tokens to Keychain before clearing
+    try {
+      await syncBackOAuthCredentials(stateDir, storage, secretStore);
+    } catch (err) {
+      log.error("Failed to sync back OAuth credentials:", err);
+    }
 
     // Clear sensitive API keys from disk before quitting
     clearAllAuthProfiles(stateDir);

@@ -50,6 +50,7 @@ export {
   syncAuthProfile,
   removeAuthProfile,
   syncAllAuthProfiles,
+  syncBackOAuthCredentials,
   clearAllAuthProfiles,
 } from "./auth-profile-writer.js";
 export { GatewayRpcClient } from "./rpc-client.js";
@@ -78,3 +79,5 @@ export {
   mergeAudioConfig,
 } from "./audio-config-writer.js";
 export { resolveVolcengineSttCliPath } from "./volcengine-stt-cli-path.js";
+export { runGeminiOAuthFlow, acquireGeminiOAuthToken, saveGeminiOAuthCredentials, validateGeminiAccessToken } from "./oauth-flow.js";
+export type { OAuthFlowCallbacks, OAuthFlowResult, AcquiredOAuthCredentials } from "./oauth-flow.js";
