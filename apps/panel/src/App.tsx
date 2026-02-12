@@ -64,6 +64,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (import.meta.env.VITE_FORCE_ONBOARDING === "1") {
+      setShowOnboarding(true);
+      return;
+    }
     checkOnboarding();
   }, []);
 

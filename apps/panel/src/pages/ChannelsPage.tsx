@@ -316,21 +316,19 @@ export function ChannelsPage() {
         <table>
           <thead>
             <tr>
-              <th style={{ width: "11%" }}>{t("channels.colChannel")}</th>
-              <th style={{ width: "13%" }}>{t("channels.colAccountId")}</th>
-              <th style={{ width: "12%" }}>{t("channels.colName")}</th>
-              <th style={{ width: "8%" }}>{t("channels.statusConfigured")}</th>
-              <th style={{ width: "8%" }}>{t("channels.statusRunning")}</th>
-              <th style={{ width: "8%" }}>{t("channels.statusConnected")}</th>
-              <th style={{ width: "10%" }}>{t("channels.fieldDmPolicy")}</th>
-              <th style={{ width: "10%" }}>{t("channels.colMode")}</th>
-              <th style={{ width: "15%" }}>{t("channels.colActions")}</th>
+              <th style={{ width: "14%" }}>{t("channels.colChannel")}</th>
+              <th style={{ width: "16%" }}>{t("channels.colAccountId")}</th>
+              <th style={{ width: "14%" }}>{t("channels.colName")}</th>
+              <th style={{ width: "10%" }}>{t("channels.statusConfigured")}</th>
+              <th style={{ width: "10%" }}>{t("channels.statusRunning")}</th>
+              <th style={{ width: "14%" }}>{t("channels.colDmPolicy")}</th>
+              <th style={{ width: "18%" }}>{t("channels.colActions")}</th>
             </tr>
           </thead>
           <tbody>
             {allAccounts.length === 0 ? (
               <tr>
-                <td colSpan={9} className="empty-cell">
+                <td colSpan={7} className="empty-cell">
                   {t("channels.noAccountsConfigured")}
                 </td>
               </tr>
@@ -344,18 +342,7 @@ export function ChannelsPage() {
                   <td>{account.name || "—"}</td>
                   <td><StatusBadge status={account.configured} /></td>
                   <td><StatusBadge status={account.running} /></td>
-                  <td><StatusBadge status={account.connected} /></td>
-                  <td className="td-meta">
-                    {account.dmPolicy || "—"}
-                  </td>
-                  <td className="td-meta">
-                    {account.mode || "—"}
-                    {account.lastError && (
-                      <div className="text-xs text-danger" style={{ marginTop: 2 }}>
-                        ⚠️ {account.lastError}
-                      </div>
-                    )}
-                  </td>
+                  <td>{account.dmPolicy ? t(`channels.dmPolicyLabel_${account.dmPolicy}`, { defaultValue: account.dmPolicy }) : "—"}</td>
                   <td>
                     <div className="td-actions">
                       <button

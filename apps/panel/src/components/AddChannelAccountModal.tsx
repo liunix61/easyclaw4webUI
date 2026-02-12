@@ -193,7 +193,7 @@ export function AddChannelAccountModal({
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {/* Account ID */}
         <div>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 6 }}>
+          <label className="form-label-block">
             {t("channels.fieldAccountIdRequired")}
           </label>
           <input
@@ -204,23 +204,16 @@ export function AddChannelAccountModal({
             onChange={(e) => setAccountId(e.target.value)}
             disabled={isEdit}
             placeholder={t("channels.fieldAccountIdPlaceholder")}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: 4,
-              border: "1px solid #e0e0e0",
-              fontSize: 14,
-              backgroundColor: isEdit ? "#f5f5f5" : "#fff",
-            }}
+            className={`input-full${isEdit ? " input-disabled" : ""}`}
           />
-          <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+          <div className="form-hint">
             {isEdit ? t("channels.fieldAccountIdHintEdit") : t("channels.fieldAccountIdHintCreate")}
           </div>
         </div>
 
         {/* Display Name */}
         <div>
-          <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 6 }}>
+          <label className="form-label-block">
             {t("channels.fieldDisplayName")}
           </label>
           <input
@@ -230,15 +223,9 @@ export function AddChannelAccountModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder={t("channels.fieldDisplayNamePlaceholder")}
-            style={{
-              width: "100%",
-              padding: "8px 12px",
-              borderRadius: 4,
-              border: "1px solid #e0e0e0",
-              fontSize: 14,
-            }}
+            className="input-full"
           />
-          <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+          <div className="form-hint">
             {t("channels.fieldDisplayNameHint")}
           </div>
         </div>
@@ -246,7 +233,7 @@ export function AddChannelAccountModal({
         {/* Dynamic channel-specific fields */}
         {schema.fields.map(field => (
           <div key={field.id}>
-            <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: "#666", marginBottom: 6 }}>
+            <label className="form-label-block">
               {t(field.label)}{field.required && !isEdit && " *"}
               {field.required && isEdit && field.isSecret && ""}
             </label>
@@ -265,14 +252,8 @@ export function AddChannelAccountModal({
                 onChange={(e) => setFormData({...formData, [field.id]: e.target.value})}
                 placeholder={field.placeholder ? t(field.placeholder) : ""}
                 rows={4}
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 4,
-                  border: "1px solid #e0e0e0",
-                  fontSize: 14,
-                  resize: "vertical",
-                }}
+                className="input-full"
+                style={{ resize: "vertical" }}
               />
             ) : (
               <input
@@ -288,18 +269,11 @@ export function AddChannelAccountModal({
                     ? t("channels.fieldBotTokenPlaceholderEdit")
                     : ""
                 }
-                style={{
-                  width: "100%",
-                  padding: "8px 12px",
-                  borderRadius: 4,
-                  border: "1px solid #e0e0e0",
-                  fontSize: 14,
-                  fontFamily: field.type === "password" ? "monospace" : "inherit",
-                }}
+                className={`input-full${field.type === "password" ? " input-mono" : ""}`}
               />
             )}
             {field.hint && (
-              <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
+              <div className="form-hint">
                 {t(field.hint)}
               </div>
             )}
@@ -308,7 +282,7 @@ export function AddChannelAccountModal({
 
         {/* Enabled Toggle (if supported by channel) */}
         {schema.commonFields?.enabled && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div className="form-checkbox-row">
             <input
               type="checkbox"
               id="enabled"
@@ -316,7 +290,7 @@ export function AddChannelAccountModal({
               onChange={(e) => setEnabled(e.target.checked)}
               style={{ width: 16, height: 16 }}
             />
-            <label htmlFor="enabled" style={{ fontSize: 13, fontWeight: 500, color: "#666", cursor: "pointer" }}>
+            <label htmlFor="enabled" className="form-checkbox-label">
               {t("channels.fieldEnableAccount")}
             </label>
           </div>
@@ -324,27 +298,17 @@ export function AddChannelAccountModal({
 
         {/* Error Display */}
         {error && (
-          <div
-            style={{
-              padding: "12px",
-              backgroundColor: "#ffebee",
-              color: "#c62828",
-              borderRadius: 4,
-              fontSize: 13,
-              borderLeft: "3px solid #f44336",
-            }}
-          >
+          <div className="modal-error-box">
             <strong>{t("channels.errorLabel")}</strong> {error}
           </div>
         )}
 
         {/* Action Buttons */}
-        <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", marginTop: 8 }}>
+        <div className="modal-actions">
           <button
             className="btn btn-secondary"
             onClick={handleCancel}
             disabled={saving}
-            style={{ padding: "8px 16px", fontSize: 14 }}
           >
             {t("channels.buttonCancel")}
           </button>
@@ -352,7 +316,6 @@ export function AddChannelAccountModal({
             className="btn btn-primary"
             onClick={handleSave}
             disabled={saving}
-            style={{ padding: "8px 16px", fontSize: 14 }}
           >
             {saving ? t("channels.buttonSaving") : isEdit ? t("channels.buttonUpdate") : t("channels.buttonCreate")}
           </button>

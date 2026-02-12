@@ -1,24 +1,64 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { fetchUpdateInfo } from "../api.js";
 import type { UpdateInfo } from "../api.js";
+import { ThemeToggle } from "../components/ThemeToggle.js";
+import { LangToggle } from "../components/LangToggle.js";
 
 const SIDEBAR_MIN = 160;
 const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 240;
 
-type ThemePreference = "system" | "light" | "dark";
-
-function getInitialPreference(): ThemePreference {
-  const stored = localStorage.getItem("theme");
-  if (stored === "system" || stored === "dark" || stored === "light") return stored;
-  return "system";
-}
-
-function getSystemTheme(): "light" | "dark" {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
+const NAV_ICONS: Record<string, ReactNode> = {
+  "/": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  ),
+  "/rules": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  ),
+  "/providers": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+    </svg>
+  ),
+  "/channels": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" />
+      <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4" />
+      <circle cx="12" cy="12" r="2" />
+      <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4" />
+      <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" />
+    </svg>
+  ),
+  "/permissions": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </svg>
+  ),
+  "/stt": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  ),
+  "/usage": (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  ),
+};
 
 export function Layout({
   children,
@@ -29,16 +69,13 @@ export function Layout({
   currentPath: string;
   onNavigate: (path: string) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
-  const [themePreference, setThemePreference] = useState<ThemePreference>(getInitialPreference);
-  const [systemTheme, setSystemTheme] = useState<"light" | "dark">(getSystemTheme);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const isDragging = useRef(false);
-
-  const effectiveTheme = themePreference === "system" ? systemTheme : themePreference;
 
   useEffect(() => {
     fetchUpdateInfo()
@@ -51,11 +88,18 @@ export function Layout({
       });
   }, []);
 
+  function handleToggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("sidebar-collapsed", String(next));
+  }
+
   const handleMouseDown = useCallback(() => {
+    if (collapsed) return;
     isDragging.current = true;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
-  }, []);
+  }, [collapsed]);
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
@@ -89,44 +133,10 @@ export function Layout({
     // { path: "/settings", label: t("nav.settings") },
   ];
 
-  // Listen for OS theme changes
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? "dark" : "light");
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
-
-  useLayoutEffect(() => {
-    document.documentElement.setAttribute("data-theme", effectiveTheme);
-    localStorage.setItem("theme", themePreference);
-  }, [effectiveTheme, themePreference]);
-
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
-  const themeMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close theme menu on outside click
-  useEffect(() => {
-    if (!themeMenuOpen) return;
-    function onClickOutside(e: MouseEvent) {
-      if (themeMenuRef.current && !themeMenuRef.current.contains(e.target as Node)) {
-        setThemeMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, [themeMenuOpen]);
-
-  const THEME_ICON: Record<ThemePreference, string> = { system: "\u{1F5A5}", light: "\u{2600}\u{FE0F}", dark: "\u{263E}" };
-
-  function toggleLang() {
-    i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh");
-  }
-
   const showBanner = updateInfo && !dismissed;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+    <div className="layout-root">
       {showBanner && (
         <div className="update-banner">
           <span className="flex-1">
@@ -152,13 +162,31 @@ export function Layout({
           </button>
         </div>
       )}
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        <nav className="sidebar" style={{ width: sidebarWidth, minWidth: sidebarWidth }}>
+      <div className="layout-body">
+        <nav
+          className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}
+          style={collapsed ? undefined : { width: sidebarWidth, minWidth: sidebarWidth }}
+        >
+          <button
+            className="sidebar-collapse-toggle"
+            onClick={handleToggleCollapse}
+            title={collapsed ? t("nav.expand") : t("nav.collapse")}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
           <h2 className="sidebar-brand">
-            <img src="/logo.png" alt="" style={{ width: 28, height: 28 }} />
-            {t("common.brandName")}
-            {currentVersion && (
-              <span className="sidebar-version">v{currentVersion}</span>
+            <img src="/logo.png" alt="" className="sidebar-brand-logo" />
+            {!collapsed && (
+              <>
+                <span className="sidebar-brand-text">{t("common.brandName")}</span>
+                {currentVersion && (
+                  <span className="sidebar-version">v{currentVersion}</span>
+                )}
+              </>
             )}
           </h2>
           <ul className="nav-list">
@@ -169,53 +197,27 @@ export function Layout({
                   <button
                     className={`nav-btn ${active ? "nav-active" : "nav-item"}`}
                     onClick={() => onNavigate(item.path)}
+                    title={collapsed ? item.label : undefined}
                   >
-                    {item.label}
+                    <span className="nav-icon">{NAV_ICONS[item.path]}</span>
+                    {!collapsed && <span className="nav-label">{item.label}</span>}
                   </button>
                 </li>
               );
             })}
           </ul>
-          <div className="theme-menu-wrapper" ref={themeMenuRef}>
-            <button
-              className="theme-menu-trigger"
-              onClick={() => setThemeMenuOpen((v) => !v)}
-              title={t(`theme.${themePreference}`)}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M12 2a10 10 0 0 0 0 20z" fill="currentColor" />
-              </svg>
-            </button>
-            {themeMenuOpen && (
-              <div className="theme-menu-popup">
-                {(["system", "light", "dark"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    className={`theme-menu-option${themePreference === mode ? " theme-menu-option-active" : ""}`}
-                    onClick={() => { setThemePreference(mode); setThemeMenuOpen(false); }}
-                  >
-                    <span className="theme-menu-option-icon">{THEME_ICON[mode]}</span>
-                    <span>{t(`theme.${mode}`)}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+          <div className={`sidebar-bottom-actions${collapsed ? " sidebar-bottom-actions-collapsed" : ""}`}>
+            <ThemeToggle />
+            <LangToggle />
           </div>
-          <div
-            className="sidebar-resize-handle"
-            onMouseDown={handleMouseDown}
-          />
+          {!collapsed && (
+            <div
+              className="sidebar-resize-handle"
+              onMouseDown={handleMouseDown}
+            />
+          )}
         </nav>
         <div className="main-content">
-          <div className="topbar">
-            <button
-              className="btn btn-secondary"
-              onClick={toggleLang}
-            >
-              {i18n.language === "zh" ? "English" : "中文"}
-            </button>
-          </div>
           <main>{children}</main>
         </div>
       </div>

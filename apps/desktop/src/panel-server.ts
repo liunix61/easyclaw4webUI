@@ -1515,6 +1515,28 @@ async function handleApiRoute(
         timeoutMs + 2000 // Add 2s buffer for request timeout
       );
 
+      // Augment snapshot with dmPolicy from config (gateway doesn't include it)
+      try {
+        const configPath = resolveOpenClawConfigPath();
+        const fullConfig = readExistingConfig(configPath);
+        const channelsCfg = (fullConfig.channels ?? {}) as Record<string, Record<string, unknown>>;
+
+        for (const [channelId, accounts] of Object.entries(snapshot.channelAccounts)) {
+          const chCfg = channelsCfg[channelId] ?? {};
+          const rootDmPolicy = chCfg.dmPolicy as string | undefined;
+          const accountsCfg = (chCfg.accounts ?? {}) as Record<string, Record<string, unknown>>;
+
+          for (const account of accounts) {
+            if (!account.dmPolicy) {
+              const acctCfg = accountsCfg[account.accountId];
+              account.dmPolicy = (acctCfg?.dmPolicy as string) ?? rootDmPolicy ?? null;
+            }
+          }
+        }
+      } catch {
+        // Non-critical: if config read fails, snapshot still works without dmPolicy
+      }
+
       sendJson(res, 200, { snapshot });
     } catch (err) {
       log.error("Failed to fetch channels status:", err);

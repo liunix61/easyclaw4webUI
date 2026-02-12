@@ -1,8 +1,10 @@
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px); /* minus topbar height */
+  flex: 1;
+  min-height: 0; /* allow flex child to shrink below content size */
   margin: -28px -48px -48px; /* escape main padding */
+  overflow: hidden;
 }
 
 .chat-messages {

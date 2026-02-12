@@ -119,23 +119,14 @@ export function ManageAllowlistModal({
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
         {/* Loading State */}
         {loading && (
-          <div style={{ padding: "20px", textAlign: "center", color: "#666" }}>
+          <div className="modal-loading">
             {t("common.loading")}...
           </div>
         )}
 
         {/* Error Display */}
         {error && (
-          <div
-            style={{
-              padding: "12px",
-              backgroundColor: "#ffebee",
-              color: "#c62828",
-              borderRadius: 4,
-              fontSize: 13,
-              borderLeft: "3px solid #f44336",
-            }}
-          >
+          <div className="modal-error-box">
             <strong>{t("channels.errorLabel")}</strong> {error}
           </div>
         )}
@@ -143,53 +134,52 @@ export function ManageAllowlistModal({
         {/* Pending Pairing Requests */}
         {!loading && (
           <div>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: 15, fontWeight: 600 }}>
+            <h3 className="modal-section-title">
               {t("pairing.pendingRequests")} ({pairingRequests.length})
             </h3>
 
             {pairingRequests.length === 0 ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#888", fontSize: 13, backgroundColor: "#f5f5f5", borderRadius: 4 }}>
+              <div className="modal-empty-state">
                 {t("pairing.noPendingRequests")}
               </div>
             ) : (
-              <div style={{ border: "1px solid #e0e0e0", borderRadius: 4, overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div className="modal-table-wrap">
+                <table className="modal-table">
                   <thead>
-                    <tr style={{ backgroundColor: "#f5f5f5", borderBottom: "1px solid #e0e0e0" }}>
-                      <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#666" }}>
+                    <tr>
+                      <th>
                         {t("pairing.code")}
                       </th>
-                      <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#666" }}>
+                      <th>
                         {t("pairing.userId")}
                       </th>
-                      <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#666" }}>
+                      <th>
                         {t("pairing.requestedAt")}
                       </th>
-                      <th style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 600, color: "#666" }}>
+                      <th style={{ textAlign: "right" }}>
                         {t("pairing.action")}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {pairingRequests.map((request) => (
-                      <tr key={request.code} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                        <td style={{ padding: "10px 12px" }}>
-                          <code style={{ fontSize: 13, fontWeight: 600, color: "#1976d2" }}>
+                      <tr key={request.code}>
+                        <td>
+                          <code className="td-code">
                             {request.code}
                           </code>
                         </td>
-                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#333" }}>
+                        <td>
                           {request.id}
                         </td>
-                        <td style={{ padding: "10px 12px", fontSize: 12, color: "#666" }}>
+                        <td className="td-muted">
                           {formatTimeAgo(request.createdAt)}
                         </td>
-                        <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                        <td style={{ textAlign: "right" }}>
                           <button
-                            className="btn btn-primary"
+                            className="btn btn-primary btn-sm"
                             onClick={() => handleApprove(request.code)}
                             disabled={processing === request.code}
-                            style={{ fontSize: 12, padding: "6px 12px" }}
                           >
                             {processing === request.code ? t("pairing.approving") : t("pairing.approve")}
                           </button>
@@ -206,39 +196,38 @@ export function ManageAllowlistModal({
         {/* Current Allowlist */}
         {!loading && (
           <div>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: 15, fontWeight: 600 }}>
+            <h3 className="modal-section-title">
               {t("pairing.currentAllowlist")} ({allowlist.length})
             </h3>
 
             {allowlist.length === 0 ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#888", fontSize: 13, backgroundColor: "#f5f5f5", borderRadius: 4 }}>
+              <div className="modal-empty-state">
                 {t("pairing.noAllowedUsers")}
               </div>
             ) : (
-              <div style={{ border: "1px solid #e0e0e0", borderRadius: 4, overflow: "hidden" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <div className="modal-table-wrap">
+                <table className="modal-table">
                   <thead>
-                    <tr style={{ backgroundColor: "#f5f5f5", borderBottom: "1px solid #e0e0e0" }}>
-                      <th style={{ padding: "10px 12px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "#666" }}>
+                    <tr>
+                      <th>
                         {t("pairing.userId")}
                       </th>
-                      <th style={{ padding: "10px 12px", textAlign: "right", fontSize: 12, fontWeight: 600, color: "#666" }}>
+                      <th style={{ textAlign: "right" }}>
                         {t("pairing.action")}
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {allowlist.map((entry) => (
-                      <tr key={entry} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                        <td style={{ padding: "10px 12px", fontSize: 13, color: "#333" }}>
+                      <tr key={entry}>
+                        <td>
                           {entry}
                         </td>
-                        <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                        <td style={{ textAlign: "right" }}>
                           <button
-                            className="btn btn-danger"
+                            className="btn btn-danger btn-sm"
                             onClick={() => handleRemove(entry)}
                             disabled={processing === entry}
-                            style={{ fontSize: 12, padding: "6px 12px" }}
                           >
                             {processing === entry ? t("pairing.removing") : t("common.remove")}
                           </button>
@@ -253,11 +242,10 @@ export function ManageAllowlistModal({
         )}
 
         {/* Close Button */}
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 8 }}>
+        <div className="modal-actions">
           <button
             className="btn btn-secondary"
             onClick={onClose}
-            style={{ padding: "8px 16px", fontSize: 14 }}
           >
             {t("common.close")}
           </button>

@@ -28,29 +28,30 @@ export function PricingTable({
   )?.modelId ?? null;
 
   return (
-    <div className="section-card" style={{ padding: "16px 18px", height: "100%", boxSizing: "border-box", display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
-      <h4 style={{ margin: "0 0 4px 0", fontSize: 14, flexShrink: 0 }}>
+    <div className="section-card pricing-card">
+      <h4 className="pricing-heading">
         {providerLabel} — {t("providers.pricingTitle")}
-        <span style={{ fontSize: 11, color: "#888", fontWeight: 400, marginLeft: 8 }}>
+        <span className="pricing-subtitle">
           {t("providers.pricingPerMillion")}
         </span>
       </h4>
 
       {loading && (
-        <div style={{ padding: "24px 0", textAlign: "center", color: "#888", fontSize: 12 }}>
+        <div className="pricing-status">
           <span className="spinner" style={{ marginRight: 6 }} />
           {t("common.loading")}
         </div>
       )}
 
       {!loading && !data && (
-        <div style={{ padding: "16px 0", textAlign: "center", fontSize: 12, color: "#888" }}>
+        <div className="pricing-status-compact">
           <div>{t("providers.pricingUnavailable")}</div>
           <a
             href={PROVIDER_URLS[provider as LLMProvider]}
             target="_blank"
             rel="noopener noreferrer"
-            style={{ color: "#1a73e8", fontSize: 12, marginTop: 6, display: "inline-block" }}
+            className="pricing-link"
+            style={{ marginTop: 6, display: "inline-block" }}
           >
             {t("providers.pricingViewFull")} &rarr;
           </a>
@@ -60,21 +61,21 @@ export function PricingTable({
       {!loading && data && (
         <>
           {data.currency !== "USD" && (
-            <div style={{ fontSize: 11, color: "#888", marginBottom: 8, flexShrink: 0 }}>
+            <div className="pricing-currency-note">
               {t("providers.pricingCurrency")}: {data.currency}
             </div>
           )}
-          <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-            <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+          <div className="pricing-scroll">
+            <table className="pricing-inner-table">
               <thead>
-                <tr style={{ borderBottom: "1px solid #e0e0e0" }}>
-                  <th style={{ textAlign: "left", padding: "4px 6px", fontWeight: 500, color: "#555" }}>
+                <tr>
+                  <th>
                     {t("providers.pricingModel")}
                   </th>
-                  <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 500, color: "#555", whiteSpace: "nowrap" }}>
+                  <th>
                     {t("providers.pricingInput")}
                   </th>
-                  <th style={{ textAlign: "right", padding: "4px 6px", fontWeight: 500, color: "#555", whiteSpace: "nowrap" }}>
+                  <th>
                     {t("providers.pricingOutput")}
                   </th>
                 </tr>
@@ -84,39 +85,24 @@ export function PricingTable({
                   const isRecommended = m.modelId === recommendedId;
                   const modelFree = isFree(m.inputPricePerMillion) && isFree(m.outputPricePerMillion);
                   return (
-                    <tr
-                      key={m.modelId}
-                      style={{
-                        borderBottom: "1px solid #f0f0f0",
-                        backgroundColor: undefined,
-                      }}
-                    >
-                      <td style={{ padding: "5px 6px" }}>
-                        <div style={{ fontWeight: 500 }}>
+                    <tr key={m.modelId}>
+                      <td>
+                        <div className="pricing-model-name">
                           {m.displayName}
                           {isRecommended && (
-                            <span style={{
-                              marginLeft: 6,
-                              fontSize: 10,
-                              color: "#fff",
-                              backgroundColor: "#2e7d32",
-                              padding: "1px 5px",
-                              borderRadius: 3,
-                              fontWeight: 600,
-                              verticalAlign: "middle",
-                            }}>
+                            <span className="pricing-badge">
                               {t("providers.pricingRecommended")}
                             </span>
                           )}
                         </div>
                         {m.note && (
-                          <div style={{ fontSize: 10, color: "#999", marginTop: 1 }}>{m.note}</div>
+                          <div className="pricing-model-note">{m.note}</div>
                         )}
                       </td>
-                      <td style={{ textAlign: "right", padding: "5px 6px", fontFamily: "monospace", whiteSpace: "nowrap", color: modelFree ? "#2e7d32" : undefined, fontWeight: modelFree ? 600 : undefined }}>
+                      <td className={`pricing-price${modelFree ? " pricing-price-free" : ""}`}>
                         {modelFree ? t("providers.pricingFree") : m.inputPricePerMillion === "—" ? "—" : `${currencySymbol}${m.inputPricePerMillion}`}
                       </td>
-                      <td style={{ textAlign: "right", padding: "5px 6px", fontFamily: "monospace", whiteSpace: "nowrap", color: modelFree ? "#2e7d32" : undefined, fontWeight: modelFree ? 600 : undefined }}>
+                      <td className={`pricing-price${modelFree ? " pricing-price-free" : ""}`}>
                         {modelFree ? t("providers.pricingFree") : m.outputPricePerMillion === "—" ? "—" : `${currencySymbol}${m.outputPricePerMillion}`}
                       </td>
                     </tr>
@@ -125,7 +111,7 @@ export function PricingTable({
               </tbody>
             </table>
           </div>
-          <div style={{ marginTop: 6, flexShrink: 0, fontSize: 10, color: "#aaa", lineHeight: 1.4 }}>
+          <div className="pricing-disclaimer">
             {t("providers.pricingDisclaimer")}
           </div>
           <div style={{ marginTop: 4, flexShrink: 0 }}>
@@ -133,7 +119,7 @@ export function PricingTable({
               href={data.pricingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: "#1a73e8", fontSize: 12 }}
+              className="pricing-link"
             >
               {t("providers.pricingViewFull")} &rarr;
             </a>

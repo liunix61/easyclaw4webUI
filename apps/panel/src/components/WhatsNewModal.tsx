@@ -35,12 +35,12 @@ export function WhatsNewModal({
     >
       {entry && (
         <>
-          <div style={{ fontSize: 13, color: "#888", marginBottom: 12 }}>
+          <div className="whats-new-version">
             v{entry.version} — {entry.date}
           </div>
-          <ul style={{ margin: 0, paddingLeft: 20 }}>
+          <ul className="whats-new-list">
             {changes.map((item, i) => (
-              <li key={i} style={{ fontSize: 14, lineHeight: 1.7, color: "#333" }}>
+              <li key={i} className="whats-new-item">
                 {item}
               </li>
             ))}

@@ -1,0 +1,51 @@
+import { useState, useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+
+export function LangToggle({ popupDirection = "up" }: { popupDirection?: "up" | "down" }) {
+  const { t, i18n } = useTranslation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClickOutside);
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [menuOpen]);
+
+  return (
+    <div className="lang-menu-wrapper" ref={menuRef}>
+      <button
+        className="lang-menu-trigger"
+        onClick={() => setMenuOpen((v) => !v)}
+        title={t("common.language")}
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <ellipse cx="12" cy="12" rx="4" ry="10" />
+          <path d="M2 12h20" />
+        </svg>
+      </button>
+      {menuOpen && (
+        <div className={`lang-menu-popup ${popupDirection === "down" ? "lang-menu-popup-down" : ""}`}>
+          <button
+            className={`lang-menu-option${i18n.language === "en" ? " lang-menu-option-active" : ""}`}
+            onClick={() => { i18n.changeLanguage("en"); setMenuOpen(false); }}
+          >
+            English
+          </button>
+          <button
+            className={`lang-menu-option${i18n.language === "zh" ? " lang-menu-option-active" : ""}`}
+            onClick={() => { i18n.changeLanguage("zh"); setMenuOpen(false); }}
+          >
+            中文
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

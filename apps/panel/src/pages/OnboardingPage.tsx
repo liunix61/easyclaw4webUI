@@ -7,6 +7,8 @@ import type { ProviderPricing } from "../api.js";
 import { ProviderSelect } from "../components/ProviderSelect.js";
 import { ModelSelect } from "../components/ModelSelect.js";
 import { PricingTable } from "../components/PricingTable.js";
+import { ThemeToggle } from "../components/ThemeToggle.js";
+import { LangToggle } from "../components/LangToggle.js";
 
 function StepDot({ step, currentStep }: { step: number; currentStep: number }) {
   const isActive = step === currentStep;
@@ -134,13 +136,11 @@ export function OnboardingPage({
 
   return (
     <div className="onboarding-page">
+      <div className="onboarding-bottom-actions">
+        <ThemeToggle />
+        <LangToggle />
+      </div>
       <div className="onboarding-top-controls">
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => i18n.changeLanguage(i18n.language === "zh" ? "en" : "zh")}
-        >
-          {i18n.language === "zh" ? "English" : "中文"}
-        </button>
         <button
           className="btn-ghost"
           onClick={onComplete}

@@ -60,45 +60,18 @@ export function ProviderSelect({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          width: "100%",
-          padding: "8px 12px",
-          borderRadius: 4,
-          border: "1px solid #e0e0e0",
-          backgroundColor: "#fff",
-          cursor: "pointer",
-          textAlign: "left",
-          fontSize: 14,
-        }}
+        className="provider-select-trigger"
       >
         <span>
           <strong>{t(`providers.label_${value}`)}</strong>
-          <span style={{ color: "#888", marginLeft: 8, fontSize: 12 }}>
+          <span className="provider-select-desc">
             {t(`providers.desc_${value}`)}
           </span>
         </span>
-        <span style={{ fontSize: 10, color: "#888" }}>{open ? "\u25B2" : "\u25BC"}</span>
+        <span className="provider-select-arrow">{open ? "\u25B2" : "\u25BC"}</span>
       </button>
       {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "100%",
-            left: 0,
-            right: 0,
-            maxHeight: 320,
-            overflowY: "auto",
-            border: "1px solid #e0e0e0",
-            borderRadius: 4,
-            backgroundColor: "#fff",
-            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-            zIndex: 10,
-            marginTop: 2,
-          }}
-        >
+        <div className="provider-select-dropdown">
           {sortedProviders.map((p) => (
             <button
               type="button"
@@ -107,27 +80,18 @@ export function ProviderSelect({
                 onChange(p);
                 setOpen(false);
               }}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "8px 12px",
-                border: "none",
-                borderBottom: "1px solid #f0f0f0",
-                backgroundColor: p === value ? "#e3f2fd" : "transparent",
-                cursor: "pointer",
-                textAlign: "left",
-              }}
+              className={`provider-select-option${p === value ? " provider-select-option-active" : ""}`}
             >
-              <div style={{ fontSize: 14, fontWeight: 500 }}>
+              <div className="provider-select-option-label">
                 {t(`providers.label_${p}`)}
               </div>
-              <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+              <div className="provider-select-option-desc">
                 {t(`providers.desc_${p}`)}
               </div>
             </button>
           ))}
           {/* OAuth providers section */}
-          <div style={{ padding: "6px 12px", fontSize: 11, color: "#999", fontWeight: 600, borderTop: "1px solid #e0e0e0", backgroundColor: "#fafafa" }}>
+          <div className="provider-select-section-header">
             {t("providers.oauthSectionTitle")}
           </div>
           {OAUTH_PROVIDERS.map((p) => (
@@ -138,21 +102,12 @@ export function ProviderSelect({
                 onChange(p);
                 setOpen(false);
               }}
-              style={{
-                display: "block",
-                width: "100%",
-                padding: "8px 12px",
-                border: "none",
-                borderBottom: "1px solid #f0f0f0",
-                backgroundColor: p === value ? "#e3f2fd" : "transparent",
-                cursor: "pointer",
-                textAlign: "left",
-              }}
+              className={`provider-select-option${p === value ? " provider-select-option-active" : ""}`}
             >
-              <div style={{ fontSize: 14, fontWeight: 500 }}>
+              <div className="provider-select-option-label">
                 {t(`providers.label_${p}`)}
               </div>
-              <div style={{ fontSize: 12, color: "#888", marginTop: 2 }}>
+              <div className="provider-select-option-desc">
                 {t(`providers.desc_${p}`)}
               </div>
             </button>
