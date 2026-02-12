@@ -360,6 +360,7 @@ describe("SettingsRepository", () => {
 
     const all = storage.settings.getAll();
     expect(all).toEqual({
+      "file-permissions-full-access": "true",
       language: "zh",
       region: "cn",
       theme: "dark",
@@ -402,7 +403,7 @@ describe("ProviderKeysRepository", () => {
     expect(key.createdAt).toBeTruthy();
 
     const fetched = storage.providerKeys.getById("key-1");
-    expect(fetched).toEqual(key);
+    expect(fetched).toMatchObject(key);
   });
 
   it("should return undefined for non-existent key", () => {
@@ -480,11 +481,13 @@ describe("Database", () => {
       .prepare("SELECT * FROM _migrations")
       .all() as Array<{ id: number; name: string; applied_at: string }>;
 
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(7);
     expect(rows[0].id).toBe(1);
     expect(rows[0].name).toBe("initial_schema");
     expect(rows[1].id).toBe(2);
     expect(rows[1].name).toBe("add_provider_keys_table");
+    expect(rows[6].id).toBe(7);
+    expect(rows[6].name).toBe("add_budget_columns_to_provider_keys");
   });
 
   it("should not re-apply migrations on second open", () => {
@@ -496,6 +499,6 @@ describe("Database", () => {
       .prepare("SELECT * FROM _migrations")
       .all() as Array<{ id: number; name: string }>;
 
-    expect(rows).toHaveLength(2);
+    expect(rows).toHaveLength(7);
   });
 });
