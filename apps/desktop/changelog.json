@@ -1,5 +1,15 @@
 [
   {
+    "version": "1.1.8",
+    "date": "2026-02-12",
+    "en": [
+      "Add GLM-5 and GLM-5-Code model support with pricing"
+    ],
+    "zh": [
+      "新增 GLM-5 和 GLM-5-Code 模型支持及定价"
+    ]
+  },
+  {
     "version": "1.1.7",
     "date": "2026-02-11",
     "en": [
