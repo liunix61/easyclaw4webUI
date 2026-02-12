@@ -15,7 +15,7 @@ export interface AddChannelAccountModalProps {
     name?: string;
     config: Record<string, unknown>;
   };
-  onSuccess: () => void;
+  onSuccess: () => Promise<void>;
 }
 
 export function AddChannelAccountModal({
@@ -30,7 +30,6 @@ export function AddChannelAccountModal({
   const isEdit = !!existingAccount;
   const schema = CHANNEL_SCHEMAS[channelId];
 
-  const [accountId, setAccountId] = useState(existingAccount?.accountId || "");
   const [name, setName] = useState(existingAccount?.name || "");
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [enabled, setEnabled] = useState((existingAccount?.config.enabled as boolean) ?? true);
@@ -42,8 +41,7 @@ export function AddChannelAccountModal({
   useEffect(() => {
     if (!schema) return;
 
-    // Update account ID, name, and enabled state
-    setAccountId(existingAccount?.accountId || "");
+    // Update name and enabled state
     setName(existingAccount?.name || "");
     setEnabled((existingAccount?.config.enabled as boolean) ?? true);
 
@@ -61,7 +59,6 @@ export function AddChannelAccountModal({
   }, [channelId, existingAccount, schema]);
 
   function resetForm() {
-    setAccountId("");
     setName("");
     setEnabled(true);
     setFormData({});
@@ -71,11 +68,6 @@ export function AddChannelAccountModal({
 
   async function handleSave() {
     // Validation
-    if (!accountId.trim()) {
-      setError(t("channels.errorAccountIdRequired"));
-      return;
-    }
-
     if (!schema) {
       setError(t("channels.errorChannelNotSupported", { channelId }));
       return;
@@ -130,7 +122,7 @@ export function AddChannelAccountModal({
       });
 
       if (isEdit) {
-        await updateChannelAccount(channelId, accountId, {
+        await updateChannelAccount(channelId, existingAccount!.accountId, {
           name: name.trim() || undefined,
           config,
           secrets: Object.keys(secrets).length > 0 ? secrets : undefined,
@@ -138,15 +130,17 @@ export function AddChannelAccountModal({
       } else {
         await createChannelAccount({
           channelId,
-          accountId: accountId.trim(),
+          accountId: "default",
           name: name.trim() || undefined,
           config,
           secrets,
         });
       }
 
+      // Wait for parent to confirm gateway has reloaded
+      await onSuccess();
+
       resetForm();
-      onSuccess();
       onClose();
     } catch (err) {
       setError(String(err));
@@ -172,9 +166,8 @@ export function AddChannelAccountModal({
         <div>
           <p>{t("channels.errorChannelNotSupported", { channelId })}</p>
           <button
-            className="btn btn-primary"
+            className="btn btn-primary error-alert-actions"
             onClick={handleCancel}
-            style={{ marginTop: 16 }}
           >
             {t("channels.buttonCancel")}
           </button>
@@ -190,27 +183,13 @@ export function AddChannelAccountModal({
       title={isEdit ? t("channels.modalTitleEdit", { channel: channelLabel }) : t("channels.modalTitleAdd", { channel: channelLabel })}
       maxWidth={600}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        {/* Account ID */}
-        <div>
-          <label className="form-label-block">
-            {t("channels.fieldAccountIdRequired")}
-          </label>
-          <input
-            type="text"
-            name="accountId"
-            autoComplete="off"
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            disabled={isEdit}
-            placeholder={t("channels.fieldAccountIdPlaceholder")}
-            className={`input-full${isEdit ? " input-disabled" : ""}`}
-          />
-          <div className="form-hint">
-            {isEdit ? t("channels.fieldAccountIdHintEdit") : t("channels.fieldAccountIdHintCreate")}
+      <div className="modal-form-col modal-form-relative">
+        {saving && (
+          <div className="modal-saving-overlay">
+            <div className="modal-saving-spinner" />
+            <span>{t("channels.buttonSaving")}</span>
           </div>
-        </div>
-
+        )}
         {/* Display Name */}
         <div>
           <label className="form-label-block">
@@ -252,8 +231,7 @@ export function AddChannelAccountModal({
                 onChange={(e) => setFormData({...formData, [field.id]: e.target.value})}
                 placeholder={field.placeholder ? t(field.placeholder) : ""}
                 rows={4}
-                className="input-full"
-                style={{ resize: "vertical" }}
+                className="input-full textarea-resize-vertical"
               />
             ) : (
               <input
@@ -288,7 +266,7 @@ export function AddChannelAccountModal({
               id="enabled"
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
-              style={{ width: 16, height: 16 }}
+              className="checkbox-sm"
             />
             <label htmlFor="enabled" className="form-checkbox-label">
               {t("channels.fieldEnableAccount")}

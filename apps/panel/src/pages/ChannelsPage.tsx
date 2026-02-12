@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { fetchChannelStatus, deleteChannelAccount, type ChannelsStatusSnapshot, type ChannelAccountSnapshot } from "../api.js";
 import { AddChannelAccountModal } from "../components/AddChannelAccountModal.js";
 import { ManageAllowlistModal } from "../components/ManageAllowlistModal.js";
+import { ConfirmDialog } from "../components/ConfirmDialog.js";
 import { Select } from "../components/Select.js";
 
 // OpenClaw built-in channels
@@ -26,9 +27,9 @@ const CHINA_BLOCKED_CHANNELS = new Set([
   "telegram", "whatsapp", "discord", "signal", "line", "googlechat", "slack",
 ]);
 
-function StatusBadge({ status }: { status: boolean | null | undefined }) {
+function StatusBadge({ status, t }: { status: boolean | null | undefined; t: (key: string) => string }) {
   const variant = status === true ? "badge-success" : status === false ? "badge-danger" : "badge-warning";
-  const text = status === true ? "Yes" : status === false ? "No" : "Unknown";
+  const text = status === true ? t("channels.statusYes") : status === false ? t("channels.statusNo") : t("channels.statusUnknown");
 
   return (
     <span className={`badge ${variant}`}>
@@ -42,6 +43,7 @@ export function ChannelsPage() {
   const [snapshot, setSnapshot] = useState<ChannelsStatusSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // Modal state
@@ -55,6 +57,11 @@ export function ChannelsPage() {
   const [allowlistChannelId, setAllowlistChannelId] = useState<string>("");
   const [allowlistChannelLabel, setAllowlistChannelLabel] = useState<string>("");
 
+  // Delete confirm dialog state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ channelId: string; accountId: string; label: string } | null>(null);
+  // Track which account is being deleted (for spinner)
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
   // Dropdown selection state for add account
   const [selectedDropdownChannel, setSelectedDropdownChannel] = useState<string>("");
 
@@ -64,32 +71,67 @@ export function ChannelsPage() {
 
   async function loadChannelStatus(showLoading = true) {
     if (showLoading) setLoading(true);
-    setError(null);
+    if (showLoading) setError(null);
 
     try {
       const data = await fetchChannelStatus(true);
+      setError(null);
       setSnapshot(data);
     } catch (err) {
-      setError(String(err));
+      // Only show error on initial load; background refreshes keep existing data
+      if (showLoading || !snapshot) {
+        setError(String(err));
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }
 
+  /** Retry loading until gateway is back (after config changes trigger a restart). */
+  function retryUntilReady(attempt = 0) {
+    const delays = [1500, 3000, 5000];
+    const delay = delays[attempt] ?? delays[delays.length - 1];
+    setTimeout(async () => {
+      try {
+        const data = await fetchChannelStatus(true);
+        setError(null);
+        setSnapshot(data);
+      } catch {
+        if (attempt < delays.length - 1) {
+          retryUntilReady(attempt + 1);
+        }
+      }
+    }, delay);
+  }
+
   useEffect(() => {
-    loadChannelStatus();
+    let timer: ReturnType<typeof setTimeout>;
+    let cancelled = false;
 
-    // Quick re-fetch after 3s so probe results are picked up promptly
-    const quick = setTimeout(() => loadChannelStatus(false), 3000);
-
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
+    async function poll() {
+      if (cancelled) return;
       setRefreshing(true);
-      loadChannelStatus(false);
-    }, 30000);
+      try {
+        const data = await fetchChannelStatus(true);
+        setError(null);
+        setSnapshot(data);
+        setLoading(false);
+        setRefreshing(false);
+        // Healthy — next poll in 30s
+        timer = setTimeout(poll, 30000);
+      } catch (err) {
+        setLoading(false);
+        setRefreshing(false);
+        if (!snapshot) setError(String(err));
+        // Gateway not ready — retry in 2s
+        timer = setTimeout(poll, 2000);
+      }
+    }
 
-    return () => { clearTimeout(quick); clearInterval(interval); };
+    poll();
+
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   function handleRefresh() {
@@ -139,22 +181,41 @@ export function ChannelsPage() {
     setModalOpen(true);
   }
 
-  async function handleDeleteAccount(channelId: string, accountId: string) {
+  function handleDeleteAccount(channelId: string, accountId: string) {
     const knownChannel = KNOWN_CHANNELS.find(c => c.id === channelId);
     const label = knownChannel ? t(knownChannel.labelKey) : channelId;
+    setDeleteConfirm({ channelId, accountId, label });
+  }
 
-    const confirmed = window.confirm(
-      `${t("common.delete")} ${label} account "${accountId}"?\n\nThis action cannot be undone.`
-    );
-
-    if (!confirmed) return;
+  async function confirmDelete() {
+    if (!deleteConfirm) return;
+    const { channelId, accountId } = deleteConfirm;
+    const key = `${channelId}-${accountId}`;
+    setDeleteConfirm(null);
+    setDeletingKey(key);
 
     try {
+      setDeleteError(null);
       await deleteChannelAccount(channelId, accountId);
-      // Delay re-fetch to give the gateway time to reload config after deletion
-      setTimeout(() => loadChannelStatus(false), 1500);
+
+      // Initial delay — give gateway time to receive SIGUSR1 and start reloading
+      await new Promise(r => setTimeout(r, 800));
+
+      // Poll until gateway responds with fresh data
+      for (let i = 0; i < 15; i++) {
+        try {
+          const data = await fetchChannelStatus(true);
+          setError(null);
+          setSnapshot(data);
+          break;
+        } catch {
+          await new Promise(r => setTimeout(r, 400));
+        }
+      }
     } catch (err) {
-      alert(`Failed to delete: ${String(err)}`);
+      setDeleteError(`${t("channels.failedToDelete")} ${String(err)}`);
+    } finally {
+      setDeletingKey(null);
     }
   }
 
@@ -163,9 +224,21 @@ export function ChannelsPage() {
     setEditingAccount(undefined);
   }
 
-  function handleModalSuccess() {
-    // Delay re-fetch to give the gateway time to reload config after changes
-    setTimeout(() => loadChannelStatus(false), 1500);
+  async function handleModalSuccess(): Promise<void> {
+    // Initial delay — give gateway time to receive SIGUSR1 and start reloading
+    await new Promise(r => setTimeout(r, 800));
+
+    // Poll until gateway responds with fresh data
+    for (let i = 0; i < 15; i++) {
+      try {
+        const data = await fetchChannelStatus(true);
+        setError(null);
+        setSnapshot(data);
+        return;
+      } catch {
+        await new Promise(r => setTimeout(r, 400));
+      }
+    }
   }
 
   function handleManageAllowlist(channelId: string) {
@@ -193,8 +266,8 @@ export function ChannelsPage() {
       <div>
         <h1>{t("channels.title")}</h1>
         <div className="error-alert">
-          <strong>Error loading channels:</strong> {error}
-          <div style={{ marginTop: 8 }}>
+          <strong>{t("channels.errorLoadingChannels")}</strong> {error}
+          <div className="error-alert-actions">
             <button className="btn btn-danger" onClick={() => loadChannelStatus()}>
               {t("channels.retry")}
             </button>
@@ -209,7 +282,7 @@ export function ChannelsPage() {
       <div>
         <h1>{t("channels.title")}</h1>
         <div className="centered-muted">
-          Gateway not connected
+          {t("channels.gatewayNotConnected")}
         </div>
       </div>
     );
@@ -240,16 +313,26 @@ export function ChannelsPage() {
 
   return (
     <div>
+      {/* Delete error banner */}
+      {deleteError && (
+        <div className="error-alert">
+          {deleteError}
+          <button className="btn btn-secondary btn-sm" onClick={() => setDeleteError(null)}>
+            {t("common.close")}
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="channel-header">
         <div className="channel-title-row">
-          <h1 style={{ margin: 0 }}>{t("channels.title")}</h1>
+          <h1 className="channel-title">{t("channels.title")}</h1>
           <button
             className="btn btn-secondary"
             onClick={handleRefresh}
             disabled={refreshing}
           >
-            {refreshing ? "Refreshing..." : `↻ ${t("channels.refreshButton")}`}
+            {refreshing ? t("channels.refreshing") : `↻ ${t("channels.refreshButton")}`}
           </button>
         </div>
         <p className="channel-subtitle">
@@ -273,7 +356,7 @@ export function ChannelsPage() {
                 value: ch.id,
                 label: t(ch.labelKey),
               }))}
-              style={{ minWidth: 200 }}
+              className="select-min-w-200"
             />
             <button
               className="btn btn-primary"
@@ -314,61 +397,64 @@ export function ChannelsPage() {
       <div className="section-card">
         <h3>{t("channels.allAccounts")}</h3>
         <div className="table-scroll-wrap">
-        <table>
+        <table className="channel-table">
           <thead>
             <tr>
-              <th style={{ width: "14%" }}>{t("channels.colChannel")}</th>
-              <th style={{ width: "16%" }}>{t("channels.colAccountId")}</th>
-              <th style={{ width: "14%" }}>{t("channels.colName")}</th>
-              <th style={{ width: "10%" }}>{t("channels.statusConfigured")}</th>
-              <th style={{ width: "10%" }}>{t("channels.statusRunning")}</th>
-              <th style={{ width: "14%" }}>{t("channels.colDmPolicy")}</th>
-              <th style={{ width: "18%" }}>{t("channels.colActions")}</th>
+              <th>{t("channels.colChannel")}</th>
+              <th>{t("channels.colName")}</th>
+              <th>{t("channels.statusConfigured")}</th>
+              <th>{t("channels.statusRunning")}</th>
+              <th>{t("channels.colDmPolicy")}</th>
+              <th>{t("channels.colActions")}</th>
             </tr>
           </thead>
           <tbody>
             {allAccounts.length === 0 ? (
               <tr>
-                <td colSpan={7} className="empty-cell">
+                <td colSpan={6} className="empty-cell">
                   {t("channels.noAccountsConfigured")}
                 </td>
               </tr>
             ) : (
-              allAccounts.map(({ channelId, channelLabel, account }) => (
-                <tr key={`${channelId}-${account.accountId}`} className="table-hover-row">
-                  <td className="font-medium">{channelLabel}</td>
-                  <td>
-                    <code className="td-meta">{account.accountId}</code>
-                  </td>
-                  <td>{account.name || "—"}</td>
-                  <td><StatusBadge status={account.configured} /></td>
-                  <td><StatusBadge status={account.running} /></td>
-                  <td>{account.dmPolicy ? t(`channels.dmPolicyLabel_${account.dmPolicy}`, { defaultValue: account.dmPolicy }) : "—"}</td>
-                  <td>
-                    <div className="td-actions">
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handleEditAccount(channelId, account)}
-                      >
-                        {t("common.edit")}
-                      </button>
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => handleManageAllowlist(channelId)}
-                        title={t("pairing.manageAllowlist")}
-                      >
-                        {t("pairing.allowlist")}
-                      </button>
-                      <button
-                        className="btn btn-danger"
-                        onClick={() => handleDeleteAccount(channelId, account.accountId)}
-                      >
-                        {t("common.delete")}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              allAccounts.map(({ channelId, channelLabel, account }) => {
+                const rowKey = `${channelId}-${account.accountId}`;
+                const isDeleting = deletingKey === rowKey;
+                return (
+                  <tr key={rowKey} className={`table-hover-row${isDeleting ? " row-deleting" : ""}`}>
+                    <td className="font-medium">{channelLabel}</td>
+                    <td>{account.name || "—"}</td>
+                    <td><StatusBadge status={account.configured} t={t} /></td>
+                    <td><StatusBadge status={account.running} t={t} /></td>
+                    <td>{account.dmPolicy ? t(`channels.dmPolicyLabel_${account.dmPolicy}`, { defaultValue: account.dmPolicy }) : "—"}</td>
+                    <td>
+                      <div className="td-actions">
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleEditAccount(channelId, account)}
+                          disabled={isDeleting}
+                        >
+                          {t("common.edit")}
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => handleManageAllowlist(channelId)}
+                          title={t("pairing.manageAllowlist")}
+                          disabled={isDeleting}
+                        >
+                          {t("pairing.allowlist")}
+                        </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDeleteAccount(channelId, account.accountId)}
+                          disabled={isDeleting}
+                        >
+                          {isDeleting ? t("channels.deleting") : t("common.delete")}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -396,6 +482,17 @@ export function ChannelsPage() {
         onClose={() => setAllowlistModalOpen(false)}
         channelId={allowlistChannelId}
         channelLabel={allowlistChannelLabel}
+      />
+
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={!!deleteConfirm}
+        onCancel={() => setDeleteConfirm(null)}
+        onConfirm={confirmDelete}
+        title={deleteConfirm ? t("channels.deleteConfirmTitle", { channel: deleteConfirm.label }) : ""}
+        message={t("channels.deleteConfirmMessage")}
+        confirmLabel={t("common.delete")}
+        cancelLabel={t("common.cancel")}
       />
     </div>
   );

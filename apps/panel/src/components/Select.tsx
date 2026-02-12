@@ -12,10 +12,10 @@ export interface SelectProps {
   options: SelectOption[];
   placeholder?: string;
   disabled?: boolean;
-  style?: React.CSSProperties;
+  className?: string;
 }
 
-export function Select({ value, onChange, options, placeholder, disabled, style }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, disabled, className }: SelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -33,7 +33,7 @@ export function Select({ value, onChange, options, placeholder, disabled, style 
   const selected = options.find((o) => o.value === value);
 
   return (
-    <div ref={ref} className="custom-select" style={style}>
+    <div ref={ref} className={`custom-select${className ? ` ${className}` : ""}`}>
       <button
         type="button"
         className="custom-select-trigger"

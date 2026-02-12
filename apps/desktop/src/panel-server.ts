@@ -1632,7 +1632,7 @@ async function handleApiRoute(
       return;
     }
 
-    const [channelId, accountId] = parts;
+    const [channelId, accountId] = parts.map(decodeURIComponent);
     const body = (await parseBody(req)) as {
       name?: string;
       config?: Record<string, unknown>;
@@ -1717,7 +1717,7 @@ async function handleApiRoute(
       return;
     }
 
-    const [channelId, accountId] = parts;
+    const [channelId, accountId] = parts.map(decodeURIComponent);
 
     try {
       const configPath = resolveOpenClawConfigPath();
@@ -1756,7 +1756,7 @@ async function handleApiRoute(
 
   // GET /api/pairing/requests/:channelId - Get pending pairing requests
   if (pathname.startsWith("/api/pairing/requests/") && req.method === "GET") {
-    const channelId = pathname.slice("/api/pairing/requests/".length);
+    const channelId = decodeURIComponent(pathname.slice("/api/pairing/requests/".length));
     if (!channelId) {
       sendJson(res, 400, { error: "Channel ID is required" });
       return;
@@ -1774,7 +1774,7 @@ async function handleApiRoute(
 
   // GET /api/pairing/allowlist/:channelId - Get current allowlist
   if (pathname.startsWith("/api/pairing/allowlist/") && req.method === "GET") {
-    const channelId = pathname.slice("/api/pairing/allowlist/".length).split("/")[0];
+    const channelId = decodeURIComponent(pathname.slice("/api/pairing/allowlist/".length).split("/")[0]);
     if (!channelId) {
       sendJson(res, 400, { error: "Channel ID is required" });
       return;

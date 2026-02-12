@@ -102,7 +102,29 @@ export function removeChannelAccount(options: RemoveChannelAccountOptions): void
     // Remove account from accounts.<accountId> (including "default")
     if (channel.accounts && typeof channel.accounts === "object") {
       const accounts = channel.accounts as Record<string, unknown>;
-      delete accounts[accountId];
+
+      if (accountId in accounts) {
+        delete accounts[accountId];
+      } else {
+        // Fallback: the gateway may report a different accountId (e.g. "default")
+        // than the config key. If the requested key isn't found, try matching by
+        // name or remove the sole account if there's only one.
+        const keys = Object.keys(accounts);
+        const matchByName = keys.find((k) => {
+          const acct = accounts[k];
+          return typeof acct === "object" && acct !== null && (acct as Record<string, unknown>).name === accountId;
+        });
+
+        if (matchByName) {
+          log.info(`Account key "${accountId}" not found, matched by name: "${matchByName}"`);
+          delete accounts[matchByName];
+        } else if (keys.length === 1) {
+          log.info(`Account key "${accountId}" not found, removing sole account: "${keys[0]}"`);
+          delete accounts[keys[0]];
+        } else {
+          log.warn(`Account "${accountId}" not found in ${channelId} accounts: [${keys.join(", ")}]`);
+        }
+      }
 
       // If no accounts left, remove the entire channel config and disable the plugin
       if (Object.keys(accounts).length === 0) {

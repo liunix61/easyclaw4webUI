@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Modal } from "./Modal.js";
+import { ConfirmDialog } from "./ConfirmDialog.js";
 import { fetchPairingRequests, fetchAllowlist, approvePairing, removeFromAllowlist, type PairingRequest } from "../api.js";
 
 export interface ManageAllowlistModalProps {
@@ -23,6 +24,9 @@ export function ManageAllowlistModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
+
+  // Confirm dialog state for remove
+  const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
   // Load data when modal opens
   useEffect(() => {
@@ -62,18 +66,16 @@ export function ManageAllowlistModal({
       // Add to allowlist
       setAllowlist(prev => [...prev, result.id]);
     } catch (err) {
-      setError(`Failed to approve: ${String(err)}`);
+      setError(`${t("pairing.failedToApprove")} ${String(err)}`);
     } finally {
       setProcessing(null);
     }
   }
 
-  async function handleRemove(entry: string) {
-    const confirmed = window.confirm(
-      `Remove ${entry} from allowlist?\n\nThey will no longer be able to send messages.`
-    );
-
-    if (!confirmed) return;
+  async function confirmRemove() {
+    if (!removeConfirm) return;
+    const entry = removeConfirm;
+    setRemoveConfirm(null);
 
     setProcessing(entry);
     setError(null);
@@ -84,7 +86,7 @@ export function ManageAllowlistModal({
       // Remove from allowlist
       setAllowlist(prev => prev.filter(e => e !== entry));
     } catch (err) {
-      setError(`Failed to remove: ${String(err)}`);
+      setError(`${t("pairing.failedToRemove")} ${String(err)}`);
     } finally {
       setProcessing(null);
     }
@@ -96,17 +98,14 @@ export function ManageAllowlistModal({
     const diffMs = now - then;
     const diffMins = Math.floor(diffMs / 60000);
 
-    if (diffMins < 1) return "just now";
-    if (diffMins === 1) return "1m ago";
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1) return t("pairing.timeJustNow");
+    if (diffMins < 60) return t("pairing.timeMinutesAgo", { count: diffMins });
 
     const diffHours = Math.floor(diffMins / 60);
-    if (diffHours === 1) return "1h ago";
-    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffHours < 24) return t("pairing.timeHoursAgo", { count: diffHours });
 
     const diffDays = Math.floor(diffHours / 24);
-    if (diffDays === 1) return "1d ago";
-    return `${diffDays}d ago`;
+    return t("pairing.timeDaysAgo", { count: diffDays });
   }
 
   return (
@@ -116,7 +115,7 @@ export function ManageAllowlistModal({
       title={`${t("pairing.modalTitle")} - ${channelLabel}`}
       maxWidth={700}
     >
-      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="modal-content-col">
         {/* Loading State */}
         {loading && (
           <div className="modal-loading">
@@ -156,7 +155,7 @@ export function ManageAllowlistModal({
                       <th>
                         {t("pairing.requestedAt")}
                       </th>
-                      <th style={{ textAlign: "right" }}>
+                      <th className="text-right">
                         {t("pairing.action")}
                       </th>
                     </tr>
@@ -175,7 +174,7 @@ export function ManageAllowlistModal({
                         <td className="td-muted">
                           {formatTimeAgo(request.createdAt)}
                         </td>
-                        <td style={{ textAlign: "right" }}>
+                        <td className="text-right">
                           <button
                             className="btn btn-primary btn-sm"
                             onClick={() => handleApprove(request.code)}
@@ -212,7 +211,7 @@ export function ManageAllowlistModal({
                       <th>
                         {t("pairing.userId")}
                       </th>
-                      <th style={{ textAlign: "right" }}>
+                      <th className="text-right">
                         {t("pairing.action")}
                       </th>
                     </tr>
@@ -223,10 +222,10 @@ export function ManageAllowlistModal({
                         <td>
                           {entry}
                         </td>
-                        <td style={{ textAlign: "right" }}>
+                        <td className="text-right">
                           <button
                             className="btn btn-danger btn-sm"
-                            onClick={() => handleRemove(entry)}
+                            onClick={() => setRemoveConfirm(entry)}
                             disabled={processing === entry}
                           >
                             {processing === entry ? t("pairing.removing") : t("common.remove")}
@@ -251,6 +250,17 @@ export function ManageAllowlistModal({
           </button>
         </div>
       </div>
+
+      {/* Remove Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={!!removeConfirm}
+        onCancel={() => setRemoveConfirm(null)}
+        onConfirm={confirmRemove}
+        title={removeConfirm ? t("pairing.removeConfirmTitle", { entry: removeConfirm }) : ""}
+        message={t("pairing.removeConfirmMessage")}
+        confirmLabel={t("common.remove")}
+        cancelLabel={t("common.cancel")}
+      />
     </Modal>
   );
 }

@@ -610,6 +610,15 @@ app.whenReady().then(async () => {
       return;
     }
 
+    if (configOnly) {
+      // Config-only change (e.g. channel add/delete): the config file was
+      // already modified by the caller. Just tell the running gateway to
+      // re-read it via SIGUSR1 — no process restart needed.
+      log.info("Config-only change, sending graceful reload to gateway");
+      await launcher.reload();
+      return;
+    }
+
     // Read current provider/region settings
     const provider = storage.settings.get("llm-provider") as LLMProvider | undefined;
     const region = locale === "zh" ? "cn" : "us";
