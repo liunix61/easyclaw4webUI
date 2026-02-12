@@ -8,44 +8,51 @@ describe("audio-config-writer", () => {
       expect(config).toBeNull();
     });
 
-    it("generates Groq (OpenAI Whisper) config when enabled", () => {
+    it("generates Groq config when enabled", () => {
       const config = generateAudioConfig(true, "groq");
       expect(config).toEqual({
         enabled: true,
         models: [
           {
-            provider: "openai",
-            model: "whisper-1",
+            provider: "groq",
+            model: "whisper-large-v3-turbo",
             type: "provider",
             capabilities: ["audio"],
           },
         ],
         maxBytes: 25 * 1024 * 1024,
-        timeoutSeconds: 60,
+        timeoutSeconds: 300,
         scope: {
           default: "allow",
         },
       });
     });
 
-    it("generates Volcengine config when enabled", () => {
-      const config = generateAudioConfig(true, "volcengine");
+    it("generates Volcengine CLI config when enabled with paths", () => {
+      const config = generateAudioConfig(true, "volcengine", {
+        nodeBin: "/usr/local/bin/node",
+        sttCliPath: "/path/to/volcengine-stt-cli.mjs",
+      });
       expect(config).toEqual({
         enabled: true,
         models: [
           {
-            provider: "volcengine",
-            type: "provider",
-            capabilities: ["audio"],
-            language: "zh-CN",
+            type: "cli",
+            command: "/usr/local/bin/node",
+            args: ["/path/to/volcengine-stt-cli.mjs", "{{MediaPath}}"],
           },
         ],
         maxBytes: 25 * 1024 * 1024,
-        timeoutSeconds: 60,
+        timeoutSeconds: 300,
         scope: {
           default: "allow",
         },
       });
+    });
+
+    it("returns null for Volcengine when nodeBin/sttCliPath not provided", () => {
+      const config = generateAudioConfig(true, "volcengine");
+      expect(config).toBeNull();
     });
   });
 

@@ -6,7 +6,7 @@ describe("easyClawConfigSchema", () => {
     const result = easyClawConfigSchema.safeParse({
       region: "cn",
       language: "zh",
-      gatewayVersion: "2026.2.6",
+      gatewayVersion: "2026.2.10",
       panelPort: 3210,
     });
     expect(result.success).toBe(true);

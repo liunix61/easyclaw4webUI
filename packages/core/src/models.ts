@@ -214,6 +214,18 @@ export const EXTRA_MODELS: Partial<Record<LLMProvider, ModelConfig[]>> = {
   zhipu: [
     {
       provider: "zhipu",
+      modelId: "glm-5",
+      displayName: "GLM-5",
+      cost: { input: cny(4), output: cny(18), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥18
+    },
+    {
+      provider: "zhipu",
+      modelId: "glm-5-code",
+      displayName: "GLM-5-Code",
+      cost: { input: cny(6), output: cny(28), cacheRead: 0, cacheWrite: 0 }, // ¥6/¥28
+    },
+    {
+      provider: "zhipu",
       modelId: "glm-4.7-flash",
       displayName: "GLM-4.7-Flash",
       cost: FREE_COST,
