@@ -35,6 +35,7 @@ import type { UpdateCheckResult } from "@easyclaw/updater";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { createTrayIcon } from "./tray-icon.js";
 import { buildTrayMenu } from "./tray-menu.js";
 import { startPanelServer } from "./panel-server.js";
@@ -188,12 +189,35 @@ function buildProxyEnv(): Record<string, string> {
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
 
-// Ensure only one instance of the desktop app runs at a time
+// Ensure only one instance of the desktop app runs at a time.
+// If the lock is held by a stale process (unclean shutdown), kill it and relaunch.
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
-  console.error("Another instance of EasyClaw desktop is already running");
-  app.quit();
-  process.exit(0);
+  let killedStale = false;
+  try {
+    // Find all EasyClaw processes except ourselves and kill them
+    const out = execSync("pgrep -x EasyClaw 2>/dev/null || true", {
+      encoding: "utf-8",
+      timeout: 3000,
+    }).trim();
+    const pids = out
+      .split("\n")
+      .filter(Boolean)
+      .map(Number)
+      .filter((pid) => pid !== process.pid && !isNaN(pid));
+    for (const pid of pids) {
+      try {
+        process.kill(pid, "SIGKILL");
+        killedStale = true;
+      } catch {}
+    }
+  } catch {}
+
+  if (killedStale) {
+    // Stale process found and killed — relaunch so the new instance gets the lock
+    app.relaunch();
+  }
+  app.exit(0);
 }
 
 app.on("second-instance", () => {
@@ -401,7 +425,6 @@ app.whenReady().then(async () => {
 
   // Clean up any existing gateway processes before starting
   try {
-    const { execSync } = await import("node:child_process");
     execSync("pkill -f 'openclaw.*gateway' || true", { stdio: "ignore" });
     log.info("Cleaned up existing gateway processes");
   } catch (err) {
@@ -984,34 +1007,48 @@ app.whenReady().then(async () => {
 
   log.info("EasyClaw desktop ready");
 
-  // Cleanup on quit
-  app.on("before-quit", async () => {
+  // Cleanup on quit — Electron does NOT await async before-quit callbacks,
+  // so we must preventDefault() to pause the quit, run async cleanup, then app.exit().
+  let cleanupDone = false;
+  app.on("before-quit", (event) => {
     isQuitting = true;
 
-    // Sync back any refreshed OAuth tokens to Keychain before clearing
-    try {
-      await syncBackOAuthCredentials(stateDir, storage, secretStore);
-    } catch (err) {
-      log.error("Failed to sync back OAuth credentials:", err);
-    }
+    if (cleanupDone) return; // Already cleaned up, let the quit proceed
+    event.preventDefault();  // Pause quit until async cleanup finishes
 
-    // Clear sensitive API keys from disk before quitting
-    clearAllAuthProfiles(stateDir);
+    (async () => {
+      // Sync back any refreshed OAuth tokens to Keychain before clearing
+      try {
+        await syncBackOAuthCredentials(stateDir, storage, secretStore);
+      } catch (err) {
+        log.error("Failed to sync back OAuth credentials:", err);
+      }
 
-    // Track app.stopped with runtime
-    if (telemetryClient) {
-      const runtimeMs = telemetryClient.getUptime();
-      telemetryClient.track("app.stopped", { runtimeMs });
+      // Clear sensitive API keys from disk before quitting
+      clearAllAuthProfiles(stateDir);
 
-      // Graceful shutdown: flush pending telemetry events
-      await telemetryClient.shutdown();
-      log.info("Telemetry client shut down gracefully");
-    }
+      // Track app.stopped with runtime
+      if (telemetryClient) {
+        const runtimeMs = telemetryClient.getUptime();
+        telemetryClient.track("app.stopped", { runtimeMs });
 
-    await Promise.all([
-      launcher.stop(),
-      proxyRouter.stop(),
-    ]);
-    storage.close();
+        // Graceful shutdown: flush pending telemetry events
+        await telemetryClient.shutdown();
+        log.info("Telemetry client shut down gracefully");
+      }
+
+      await Promise.all([
+        launcher.stop(),
+        proxyRouter.stop(),
+      ]);
+      storage.close();
+    })()
+      .catch((err) => {
+        log.error("Cleanup error during quit:", err);
+      })
+      .finally(() => {
+        cleanupDone = true;
+        app.exit(0); // Now actually exit — releases single-instance lock
+      });
   });
 });

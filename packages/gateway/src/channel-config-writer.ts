@@ -62,6 +62,9 @@ export function writeChannelAccount(options: WriteChannelAccountOptions): void {
   const accounts = channel.accounts as Record<string, unknown>;
   accounts[accountId] = config;
 
+  // Auto-enable the channel plugin in plugins.entries so the gateway loads it
+  enableChannelPlugin(existingConfig, channelId);
+
   // Write back to file
   writeFileSync(configPath, JSON.stringify(existingConfig, null, 2), "utf-8");
   log.info(`Wrote channel account: ${channelId}/${accountId}`);
@@ -101,9 +104,10 @@ export function removeChannelAccount(options: RemoveChannelAccountOptions): void
       const accounts = channel.accounts as Record<string, unknown>;
       delete accounts[accountId];
 
-      // If no accounts left, remove the entire channel config
+      // If no accounts left, remove the entire channel config and disable the plugin
       if (Object.keys(accounts).length === 0) {
         delete channels[channelId];
+        disableChannelPlugin(config, channelId);
       }
     }
 
@@ -112,6 +116,45 @@ export function removeChannelAccount(options: RemoveChannelAccountOptions): void
   } catch (err) {
     log.error(`Failed to remove channel account ${channelId}/${accountId}:`, err);
     throw err;
+  }
+}
+
+/**
+ * Enable a channel's plugin in plugins.entries so the gateway loads it.
+ * Channel ID maps directly to plugin ID (e.g., "telegram" → plugins.entries.telegram).
+ */
+function enableChannelPlugin(config: Record<string, unknown>, channelId: string): void {
+  if (!config.plugins || typeof config.plugins !== "object") {
+    config.plugins = {};
+  }
+  const plugins = config.plugins as Record<string, unknown>;
+
+  if (!plugins.entries || typeof plugins.entries !== "object") {
+    plugins.entries = {};
+  }
+  const entries = plugins.entries as Record<string, unknown>;
+
+  const existing = typeof entries[channelId] === "object" && entries[channelId] !== null
+    ? (entries[channelId] as Record<string, unknown>)
+    : {};
+  entries[channelId] = { ...existing, enabled: true };
+
+  log.info(`Enabled channel plugin: ${channelId}`);
+}
+
+/**
+ * Disable a channel's plugin in plugins.entries when its last account is removed.
+ */
+function disableChannelPlugin(config: Record<string, unknown>, channelId: string): void {
+  if (!config.plugins || typeof config.plugins !== "object") return;
+  const plugins = config.plugins as Record<string, unknown>;
+
+  if (!plugins.entries || typeof plugins.entries !== "object") return;
+  const entries = plugins.entries as Record<string, unknown>;
+
+  if (typeof entries[channelId] === "object" && entries[channelId] !== null) {
+    (entries[channelId] as Record<string, unknown>).enabled = false;
+    log.info(`Disabled channel plugin: ${channelId}`);
   }
 }
 
