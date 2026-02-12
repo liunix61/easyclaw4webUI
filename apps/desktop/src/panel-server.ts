@@ -1529,7 +1529,7 @@ async function handleApiRoute(
           for (const account of accounts) {
             if (!account.dmPolicy) {
               const acctCfg = accountsCfg[account.accountId];
-              account.dmPolicy = (acctCfg?.dmPolicy as string) ?? rootDmPolicy ?? null;
+              account.dmPolicy = (acctCfg?.dmPolicy as string) ?? rootDmPolicy ?? "pairing";
             }
           }
         }
