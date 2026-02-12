@@ -156,12 +156,10 @@ export function RulesPage() {
           {/* Right: text input */}
           <div className="rules-editor-col">
             <textarea
-              className="input-full"
+              className="input-full rules-editor-textarea"
               value={newRuleText}
               onChange={(e) => setNewRuleText(e.target.value)}
               placeholder={t("rules.placeholder")}
-              rows={8}
-              style={{ minHeight: 160 }}
             />
           </div>
         </div>
@@ -207,16 +205,19 @@ export function RulesPage() {
                         onChange={(e) => setEditText(e.target.value)}
                         rows={3}
                       />
-                      <button className="btn btn-primary btn-sm" onClick={() => handleSaveEdit(rule.id)}>
-                        {t("common.save")}
-                      </button>
-                      <button className="btn btn-secondary" onClick={handleCancelEdit}>
-                        {t("common.cancel")}
-                      </button>
+                      <div className="td-edit-actions">
+                        <button className="btn btn-primary btn-sm" onClick={() => handleSaveEdit(rule.id)}>
+                          {t("common.save")}
+                        </button>
+                        <button className="btn btn-secondary" onClick={handleCancelEdit}>
+                          {t("common.cancel")}
+                        </button>
+                      </div>
                     </div>
                   ) : (
-                    <span title={rule.text}>
-                      {rule.text.length > 80 ? rule.text.slice(0, 80) + "..." : rule.text}
+                    <span className="td-rule-wrap">
+                      <span className="td-rule-text">{rule.text}</span>
+                      <span className="td-rule-tooltip">{rule.text}</span>
                     </span>
                   )}
                 </td>
