@@ -11,6 +11,8 @@ export interface ProxyRouterConfig {
   activeKeys: Record<string, string>;
   /** Key ID to proxy URL mapping (null = direct connection) */
   keyProxies: Record<string, string | null>;
+  /** System-level proxy URL auto-detected from OS (e.g. "http://127.0.0.1:1087" or "socks5://127.0.0.1:1080"). */
+  systemProxy?: string | null;
 }
 
 /**

@@ -1,6 +1,5 @@
-import { createServer, type Server as NetServer, type Socket } from "node:net";
+import { createServer, Socket, type Server as NetServer } from "node:net";
 import { readFileSync, existsSync, watch, type FSWatcher } from "node:fs";
-import { ProxyAgent } from "undici";
 import { createLogger } from "@easyclaw/logger";
 import type { ProxyRouterConfig, ProxyRouterOptions } from "./types.js";
 
@@ -84,6 +83,7 @@ export class ProxyRouter {
       log.info("Config loaded successfully", {
         providers: Object.keys(this.config.activeKeys).length,
         domains: Object.keys(this.config.domainToProvider).length,
+        systemProxy: this.config.systemProxy ?? "(none)",
       });
       this.options.onConfigReload(this.config);
     } catch (err) {
@@ -208,7 +208,136 @@ export class ProxyRouter {
   }
 
   /**
-   * Connect to target via upstream proxy.
+   * Connect to a host:port, routing through the system proxy if configured.
+   * Returns a connected Socket that reaches the given host.
+   */
+  private async connectToHost(host: string, port: number): Promise<Socket> {
+    const systemProxy = this.config?.systemProxy;
+    if (!systemProxy) {
+      // Direct TCP connection
+      const socket = new Socket();
+      await new Promise<void>((resolve, reject) => {
+        socket.connect(port, host, () => resolve());
+        socket.on("error", reject);
+      });
+      return socket;
+    }
+
+    const proxyUrl = new URL(systemProxy);
+    const proxyHost = proxyUrl.hostname;
+    const proxyPort = parseInt(proxyUrl.port || "1080", 10);
+    const scheme = proxyUrl.protocol.replace(":", "");
+
+    if (scheme === "socks5" || scheme === "socks") {
+      return this.connectViaSocks5(host, port, proxyHost, proxyPort);
+    }
+
+    // Default: HTTP CONNECT tunnel through system proxy
+    return this.connectViaHttpConnect(host, port, proxyHost, proxyPort);
+  }
+
+  /**
+   * Establish a tunnel to host:port through an HTTP proxy using CONNECT.
+   */
+  private async connectViaHttpConnect(
+    targetHost: string,
+    targetPort: number,
+    proxyHost: string,
+    proxyPort: number,
+  ): Promise<Socket> {
+    const socket = new Socket();
+    await new Promise<void>((resolve, reject) => {
+      socket.connect(proxyPort, proxyHost, () => resolve());
+      socket.on("error", reject);
+    });
+
+    socket.write(
+      `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r\n` +
+      `Host: ${targetHost}:${targetPort}\r\n\r\n`,
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      let buf = Buffer.alloc(0);
+      const onData = (chunk: Buffer) => {
+        buf = Buffer.concat([buf, chunk]);
+        const end = buf.indexOf("\r\n\r\n");
+        if (end !== -1) {
+          socket.off("data", onData);
+          const resp = buf.subarray(0, end).toString("utf-8");
+          if (resp.includes("200")) {
+            resolve();
+          } else {
+            reject(new Error(`System HTTP proxy refused CONNECT: ${resp}`));
+          }
+        }
+      };
+      socket.on("data", onData);
+      socket.on("error", reject);
+    });
+
+    return socket;
+  }
+
+  /**
+   * Connect to host:port through a SOCKS5 proxy.
+   */
+  private async connectViaSocks5(
+    targetHost: string,
+    targetPort: number,
+    proxyHost: string,
+    proxyPort: number,
+  ): Promise<Socket> {
+    const socket = new Socket();
+    await new Promise<void>((resolve, reject) => {
+      socket.connect(proxyPort, proxyHost, () => resolve());
+      socket.on("error", reject);
+    });
+
+    // Greeting: SOCKS5, 1 auth method, no-auth
+    socket.write(Buffer.from([0x05, 0x01, 0x00]));
+    const greeting = await readBytes(socket, 2);
+    if (greeting[0] !== 0x05 || greeting[1] !== 0x00) {
+      socket.destroy();
+      throw new Error("SOCKS5 handshake failed (unsupported auth method)");
+    }
+
+    // Connect request: version=5, cmd=connect, rsv=0, atype=domain
+    const hostBuf = Buffer.from(targetHost, "utf-8");
+    const req = Buffer.alloc(4 + 1 + hostBuf.length + 2);
+    req[0] = 0x05;
+    req[1] = 0x01;
+    req[2] = 0x00;
+    req[3] = 0x03; // domain name
+    req[4] = hostBuf.length;
+    hostBuf.copy(req, 5);
+    req.writeUInt16BE(targetPort, 5 + hostBuf.length);
+    socket.write(req);
+
+    // Read connect response header (4 bytes: ver, rep, rsv, atype)
+    const resp = await readBytes(socket, 4);
+    if (resp[0] !== 0x05 || resp[1] !== 0x00) {
+      socket.destroy();
+      throw new Error(`SOCKS5 connect failed (reply code: ${resp[1]})`);
+    }
+
+    // Drain the bound address based on address type
+    const atype = resp[3];
+    if (atype === 0x01) {
+      await readBytes(socket, 4 + 2); // IPv4 (4) + port (2)
+    } else if (atype === 0x04) {
+      await readBytes(socket, 16 + 2); // IPv6 (16) + port (2)
+    } else if (atype === 0x03) {
+      const lenBuf = await readBytes(socket, 1);
+      await readBytes(socket, lenBuf[0] + 2); // domain (len) + port (2)
+    }
+
+    return socket;
+  }
+
+  /**
+   * Connect to target via upstream per-key proxy.
+   * If a system proxy is configured, the connection to the per-key proxy
+   * is itself routed through the system proxy (proxy chaining).
    */
   private async connectViaProxy(
     clientSocket: Socket,
@@ -223,15 +352,10 @@ export class ProxyRouter {
       ? `${proxyUrl.username}:${proxyUrl.password}`
       : null;
 
-    // Connect to upstream proxy
-    const proxySocket = new (await import("node:net")).Socket();
+    // Connect to per-key proxy (routed through system proxy if configured)
+    const proxySocket = await this.connectToHost(proxyHost, proxyPort);
 
-    await new Promise<void>((resolve, reject) => {
-      proxySocket.connect(proxyPort, proxyHost, () => resolve());
-      proxySocket.on("error", reject);
-    });
-
-    // Send CONNECT request to upstream proxy
+    // Send CONNECT request to per-key proxy for the final target
     let connectRequest = `CONNECT ${targetHost}:${targetPort} HTTP/1.1\r\n`;
     connectRequest += `Host: ${targetHost}:${targetPort}\r\n`;
     if (proxyAuth) {
@@ -278,20 +402,15 @@ export class ProxyRouter {
   }
 
   /**
-   * Connect to target directly without proxy.
+   * Connect to target directly (no per-key proxy).
+   * If a system proxy is configured, the connection is routed through it.
    */
   private async connectDirect(
     clientSocket: Socket,
     targetHost: string,
     targetPort: number,
   ): Promise<void> {
-    // Create raw TCP connection to target (NOT TLS - client handles that through the tunnel)
-    const targetSocket = new (await import("node:net")).Socket();
-
-    await new Promise<void>((resolve, reject) => {
-      targetSocket.connect(targetPort, targetHost, () => resolve());
-      targetSocket.on("error", reject);
-    });
+    const targetSocket = await this.connectToHost(targetHost, targetPort);
 
     // Tunnel established, send success to client
     clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
@@ -307,6 +426,33 @@ export class ProxyRouter {
       targetSocket.end();
     });
   }
+}
+
+/**
+ * Read exactly `n` bytes from a socket.
+ */
+function readBytes(socket: Socket, n: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let buf = Buffer.alloc(0);
+    const onData = (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+      if (buf.length >= n) {
+        socket.off("data", onData);
+        socket.off("error", onErr);
+        resolve(buf.subarray(0, n));
+        // If there are leftover bytes, push them back
+        if (buf.length > n) {
+          socket.unshift(buf.subarray(n));
+        }
+      }
+    };
+    const onErr = (err: Error) => {
+      socket.off("data", onData);
+      reject(err);
+    };
+    socket.on("data", onData);
+    socket.on("error", onErr);
+  });
 }
 
 export * from "./types.js";

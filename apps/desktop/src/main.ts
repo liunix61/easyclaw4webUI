@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, Tray, shell, dialog, Notification } from "electron";
+import { app, BrowserWindow, Menu, Tray, shell, dialog, Notification, session } from "electron";
 import { createLogger, enableFileLogging } from "@easyclaw/logger";
 import {
   GatewayLauncher,
@@ -125,7 +125,59 @@ const DOMAIN_TO_PROVIDER: Record<string, string> = {
   "bedrock-runtime.eu-central-1.amazonaws.com": "amazon-bedrock",
   "bedrock-runtime.ap-southeast-1.amazonaws.com": "amazon-bedrock",
   "bedrock-runtime.ap-northeast-1.amazonaws.com": "amazon-bedrock",
+  // Google Gemini CLI OAuth (Cloud Code API)
+  "cloudcode-pa.googleapis.com": "google-gemini-cli",
+  "oauth2.googleapis.com": "google-gemini-cli",
 };
+
+/**
+ * Parse Electron's PAC-format proxy string into a URL.
+ * Examples: "DIRECT" → null, "PROXY 127.0.0.1:1087" → "http://127.0.0.1:1087",
+ * "SOCKS5 127.0.0.1:1080" → "socks5://127.0.0.1:1080"
+ */
+function parsePacProxy(pac: string): string | null {
+  const trimmed = pac.trim();
+  if (!trimmed || trimmed === "DIRECT") return null;
+
+  // PAC can return multiple entries separated by ";", take the first non-DIRECT one
+  for (const entry of trimmed.split(";")) {
+    const part = entry.trim();
+    if (!part || part === "DIRECT") continue;
+
+    const match = part.match(/^(PROXY|SOCKS5?|SOCKS4|HTTPS)\s+(.+)$/i);
+    if (!match) continue;
+
+    const [, type, hostPort] = match;
+    const upper = type.toUpperCase();
+    if (upper === "PROXY" || upper === "HTTPS") {
+      return `http://${hostPort}`;
+    }
+    if (upper === "SOCKS5" || upper === "SOCKS") {
+      return `socks5://${hostPort}`;
+    }
+    if (upper === "SOCKS4") {
+      return `socks5://${hostPort}`; // Treat SOCKS4 as SOCKS5 (compatible for CONNECT)
+    }
+  }
+  return null;
+}
+
+/**
+ * Detect system proxy using Electron's session.resolveProxy().
+ * Works with PAC auto-config and global proxy modes on macOS and Windows.
+ */
+async function detectSystemProxy(): Promise<string | null> {
+  try {
+    const pac = await session.defaultSession.resolveProxy("https://www.google.com");
+    log.debug(`resolveProxy returned: "${pac}"`);
+    const parsed = parsePacProxy(pac);
+    log.debug(`Parsed system proxy: ${parsed ?? "(none/DIRECT)"}`);
+    return parsed;
+  } catch (err) {
+    log.warn("Failed to detect system proxy:", err);
+    return null;
+  }
+}
 
 /**
  * Write proxy router configuration file.
@@ -134,6 +186,7 @@ const DOMAIN_TO_PROVIDER: Record<string, string> = {
 async function writeProxyRouterConfig(
   storage: import("@easyclaw/storage").Storage,
   secretStore: import("@easyclaw/secrets").SecretStore,
+  systemProxy?: string | null,
 ): Promise<void> {
   const configPath = resolveProxyRouterConfigPath();
   const config: ProxyRouterConfig = {
@@ -141,10 +194,13 @@ async function writeProxyRouterConfig(
     domainToProvider: DOMAIN_TO_PROVIDER,
     activeKeys: {},
     keyProxies: {},
+    systemProxy: systemProxy ?? null,
   };
 
   // For each provider, find active key and its proxy
-  for (const provider of ALL_PROVIDERS) {
+  // Include both standard providers AND google-gemini-cli (OAuth-based, not in ALL_PROVIDERS)
+  const providers: string[] = [...ALL_PROVIDERS, "google-gemini-cli"];
+  for (const provider of providers) {
     const defaultKey = storage.providerKeys.getDefault(provider);
     if (defaultKey) {
       config.activeKeys[provider] = defaultKey.id;
@@ -174,22 +230,19 @@ async function writeProxyRouterConfig(
  * Returns fixed proxy URL (127.0.0.1:9999) regardless of configuration.
  * The router handles dynamic routing based on its config file.
  *
- * Channel messaging domains (Feishu, Telegram, Discord, Slack, WeCom) are
- * excluded via NO_PROXY so their SDKs connect directly instead of tunneling
- * through the proxy router (which only handles LLM provider routing).
+ * Chinese-domestic channel domains (Feishu, WeCom) are excluded via NO_PROXY
+ * since they don't need GFW bypass. GFW-blocked channel domains (Telegram,
+ * Discord, Slack, LINE) go through the proxy router so the system proxy can
+ * route them out.
  */
 function buildProxyEnv(): Record<string, string> {
   const localProxyUrl = `http://127.0.0.1:${PROXY_ROUTER_PORT}`;
   const noProxy = [
     "localhost",
     "127.0.0.1",
-    // Channel messaging API domains — bypass proxy router
+    // Chinese-domestic channel APIs — no GFW bypass needed, connect directly
     "open.feishu.cn",
     "open.larksuite.com",
-    "api.telegram.org",
-    "discord.com",
-    "gateway.discord.gg",
-    "slack.com",
     "qyapi.weixin.qq.com",
   ].join(",");
   return {
@@ -204,6 +257,7 @@ function buildProxyEnv(): Record<string, string> {
 
 let mainWindow: BrowserWindow | null = null;
 let isQuitting = false;
+let lastSystemProxy: string | null = null;
 
 // Ensure only one instance of the desktop app runs at a time.
 // If the lock is held by a stale process (unclean shutdown), kill it and relaunch.
@@ -257,7 +311,7 @@ app.on("activate", () => {
 app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   enableFileLogging();
-  log.info("EasyClaw desktop starting");
+  log.info(`EasyClaw desktop starting (build: ${__BUILD_TIMESTAMP__})`);
 
   // Show dock icon immediately. LSUIElement=true in Info.plist hides it by default
   // (which also prevents child processes like the gateway from showing dock icons).
@@ -614,7 +668,7 @@ app.whenReady().then(async () => {
     // Always sync auth profiles and proxy router config so OpenClaw has current state on disk
     await Promise.all([
       syncAllAuthProfiles(stateDir, storage, secretStore),
-      writeProxyRouterConfig(storage, secretStore),
+      writeProxyRouterConfig(storage, secretStore, lastSystemProxy),
     ]);
 
     if (keyOnly) {
@@ -749,17 +803,19 @@ app.whenReady().then(async () => {
 
   tray.setToolTip("EasyClaw");
 
-  // Windows/Linux: clicking the tray icon should show/hide the window
-  // (macOS uses the context menu on click, so this is a no-op there)
-  tray.on("click", () => {
-    if (!mainWindow) return;
-    if (mainWindow.isVisible()) {
-      mainWindow.hide();
-    } else {
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
+  // Windows/Linux: clicking the tray icon should show/hide the window.
+  // macOS uses the context menu on click, so skip this handler there.
+  if (process.platform !== "darwin") {
+    tray.on("click", () => {
+      if (!mainWindow) return;
+      if (mainWindow.isVisible()) {
+        mainWindow.hide();
+      } else {
+        mainWindow.show();
+        mainWindow.focus();
+      }
+    });
+  }
 
   updateTray("stopped");
 
@@ -930,9 +986,11 @@ app.whenReady().then(async () => {
       });
     },
     onOAuthAcquire: async (provider: string): Promise<{ email?: string; tokenPreview: string }> => {
+      const proxyRouterUrl = `http://127.0.0.1:${PROXY_ROUTER_PORT}`;
       const acquired = await acquireGeminiOAuthToken({
         openUrl: (url) => shell.openExternal(url),
         onStatusUpdate: (msg) => log.info(`OAuth: ${msg}`),
+        proxyUrl: proxyRouterUrl,
       });
       // Store credentials temporarily until onOAuthSave is called
       pendingOAuthCreds = acquired;
@@ -945,8 +1003,9 @@ app.whenReady().then(async () => {
       }
       const creds = pendingOAuthCreds;
 
-      // Validate access token (optionally through proxy)
-      const validation = await validateGeminiAccessToken(creds.credentials.access, options.proxyUrl, creds.credentials.projectId);
+      // Validate access token through the proxy router (system proxy + per-key proxy chain)
+      const proxyRouterUrl = `http://127.0.0.1:${PROXY_ROUTER_PORT}`;
+      const validation = await validateGeminiAccessToken(creds.credentials.access, proxyRouterUrl, creds.credentials.projectId);
       if (!validation.valid) {
         throw new Error(validation.error || "Token validation failed");
       }
@@ -973,7 +1032,7 @@ app.whenReady().then(async () => {
 
       // Enable plugin + sync auth profiles + rewrite config
       await syncAllAuthProfiles(stateDir, storage, secretStore);
-      await writeProxyRouterConfig(storage, secretStore);
+      await writeProxyRouterConfig(storage, secretStore, lastSystemProxy);
       writeGatewayConfig({
         configPath,
         enableGeminiCliAuth: true,
@@ -998,17 +1057,22 @@ app.whenReady().then(async () => {
     },
   });
 
-  // Sync auth profiles + proxy router config + build env, then start gateway.
-  // Auth profiles are synced so OpenClaw has keys on disk from the first LLM turn.
-  // Proxy router config is written so dynamic proxy routing is ready.
-  // Env vars point to fixed local proxy (127.0.0.1:9999), no need to rebuild on changes.
-  // File permissions are injected as EASYCLAW_FILE_PERMISSIONS env var.
+  // Detect system proxy, sync auth profiles + proxy router config + build env, then start gateway.
   const workspacePath = stateDir;
-  Promise.all([
-    syncAllAuthProfiles(stateDir, storage, secretStore),
-    writeProxyRouterConfig(storage, secretStore),
-    buildGatewayEnv(secretStore, { ELECTRON_RUN_AS_NODE: "1" }, storage, workspacePath),
-  ])
+  detectSystemProxy()
+    .then((proxy) => {
+      lastSystemProxy = proxy;
+      if (proxy) {
+        log.info(`System proxy detected: ${proxy}`);
+      } else {
+        log.info("No system proxy detected (DIRECT)");
+      }
+      return Promise.all([
+        syncAllAuthProfiles(stateDir, storage, secretStore),
+        writeProxyRouterConfig(storage, secretStore, lastSystemProxy),
+        buildGatewayEnv(secretStore, { ELECTRON_RUN_AS_NODE: "1" }, storage, workspacePath),
+      ]);
+    })
     .then(([, , secretEnv]) => {
       // Debug: Log which API keys are configured (without showing values)
       const configuredKeys = Object.keys(secretEnv).filter(k => k.endsWith('_API_KEY') || k.endsWith('_OAUTH_TOKEN'));
@@ -1029,6 +1093,20 @@ app.whenReady().then(async () => {
     .catch((err) => {
       log.error("Failed to start gateway:", err);
     });
+
+  // Re-detect system proxy every 30 seconds and update config if changed
+  setInterval(async () => {
+    try {
+      const proxy = await detectSystemProxy();
+      if (proxy !== lastSystemProxy) {
+        log.info(`System proxy changed: ${lastSystemProxy ?? "(none)"} → ${proxy ?? "(none)"}`);
+        lastSystemProxy = proxy;
+        await writeProxyRouterConfig(storage, secretStore, lastSystemProxy);
+      }
+    } catch (err) {
+      log.warn("System proxy re-detection failed:", err);
+    }
+  }, 30_000);
 
   log.info("EasyClaw desktop ready");
 

@@ -9,6 +9,8 @@ const log = createLogger("gateway:oauth-flow");
 export interface OAuthFlowCallbacks {
   openUrl: (url: string) => Promise<void>;
   onStatusUpdate?: (status: string) => void;
+  /** Local proxy router URL (e.g. "http://127.0.0.1:9999") for routing through system proxy. */
+  proxyUrl?: string;
 }
 
 export interface OAuthFlowResult {
@@ -51,7 +53,7 @@ export async function acquireGeminiOAuthToken(
     const installed = await installGeminiCliLocal((msg) => {
       log.info(msg);
       callbacks.onStatusUpdate?.(msg);
-    });
+    }, callbacks.proxyUrl);
     if (!installed || !isGeminiCliAvailable()) {
       throw new Error(
         "Failed to install Gemini CLI. Please install manually: npm install -g @google/gemini-cli",
@@ -74,6 +76,7 @@ export async function acquireGeminiOAuthToken(
         if (msg) log.info(`OAuth: ${msg}`);
       },
     },
+    proxyUrl: callbacks.proxyUrl,
   });
 
   log.info(`OAuth acquire complete, email=${creds.email ?? "(none)"}`);
@@ -87,10 +90,7 @@ export async function acquireGeminiOAuthToken(
 
 /**
  * Step 2: Validate a Gemini OAuth access token by calling Google's userinfo endpoint.
- * The Gemini CLI OAuth token is a GCP OAuth token that goes through OpenClaw's plugin
- * for actual API calls (via cloudcode-pa.googleapis.com). The standard generativelanguage
- * endpoint returns 403 for these tokens. Using userinfo validates that the token is valid
- * and (if configured) that the proxy is reachable.
+ * Routes through the local proxy router which handles system proxy + per-key proxy.
  */
 export async function validateGeminiAccessToken(
   accessToken: string,
@@ -104,7 +104,7 @@ export async function validateGeminiAccessToken(
   if (proxyUrl) {
     const { ProxyAgent } = await import("undici");
     dispatcher = new ProxyAgent(proxyUrl);
-    log.info(`Validating Gemini OAuth token through proxy: ${proxyUrl.replace(/\/\/[^:]+:[^@]+@/, '//*****:*****@')}`);
+    log.info(`Validating Gemini OAuth token through proxy router: ${proxyUrl}`);
   }
 
   try {

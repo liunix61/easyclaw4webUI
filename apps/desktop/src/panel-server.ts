@@ -15,8 +15,18 @@ import type { ChannelsStatusSnapshot } from "@easyclaw/core";
 import { removeSkillFile } from "@easyclaw/rules";
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
+import WebSocket from "ws";
 
 const log = createLogger("panel-server");
+
+/**
+ * Fetch through local proxy router so GFW-blocked APIs (Telegram, LINE, etc.)
+ * can reach their targets via the system proxy.
+ */
+async function proxiedFetch(url: string | URL, init?: RequestInit): Promise<Response> {
+  const { ProxyAgent } = await import("undici");
+  return fetch(url, { ...init, dispatcher: new ProxyAgent("http://127.0.0.1:9999") } as RequestInit);
+}
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -59,6 +69,228 @@ interface UsageFilter {
   until?: string;
   model?: string;
   provider?: string;
+}
+
+// WeCom relay state (in-memory, reset on app restart)
+let wecomRelayState: {
+  relayUrl: string;
+  authToken: string;
+  status: "pending" | "bound" | "active" | "error";
+  bindingToken?: string;
+  customerServiceUrl?: string;
+} | null = null;
+
+// === WeCom Relay Persistent Connection ===
+// Maintains a long-lived WS to the relay server so that messages from
+// WeCom users are forwarded to the local AI agent and replies flow back.
+
+const WECOM_RECONNECT_MIN_MS = 1_000;
+const WECOM_RECONNECT_MAX_MS = 30_000;
+
+let wecomRelayWs: WebSocket | null = null;
+let wecomReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let wecomReconnectDelay = WECOM_RECONNECT_MIN_MS;
+let wecomIntentionalClose = false;
+let wecomGatewayRpc: GatewayRpcClient | null = null;
+
+// Cached connection params for reconnects
+let wecomConnParams: {
+  relayUrl: string;
+  authToken: string;
+  gatewayId: string;
+  gatewayWsUrl: string;
+  gatewayToken?: string;
+} | null = null;
+
+/**
+ * Start a persistent connection to the WeCom relay and a dedicated
+ * gateway RPC client for forwarding messages to the AI agent.
+ */
+function startWeComRelay(params: {
+  relayUrl: string;
+  authToken: string;
+  gatewayId: string;
+  gatewayWsUrl: string;
+  gatewayToken?: string;
+}): void {
+  stopWeComRelay();
+  wecomIntentionalClose = false;
+  wecomConnParams = params;
+
+  // Dedicated gateway RPC client with onEvent to capture AI replies
+  wecomGatewayRpc = new GatewayRpcClient({
+    url: params.gatewayWsUrl,
+    token: params.gatewayToken,
+    onEvent: (evt) => {
+      if (evt.event === "chat") {
+        handleWeComChatEvent(evt.payload);
+      }
+    },
+  });
+  wecomGatewayRpc.start().catch((err) => {
+    log.error("WeCom: gateway RPC start failed:", err);
+  });
+
+  // Persistent WS to relay
+  doConnectWeComRelay();
+}
+
+/** Tear down all WeCom relay resources. */
+function stopWeComRelay(): void {
+  wecomIntentionalClose = true;
+  if (wecomReconnectTimer) {
+    clearTimeout(wecomReconnectTimer);
+    wecomReconnectTimer = null;
+  }
+  if (wecomRelayWs) {
+    wecomRelayWs.close();
+    wecomRelayWs = null;
+  }
+  if (wecomGatewayRpc) {
+    wecomGatewayRpc.stop();
+    wecomGatewayRpc = null;
+  }
+}
+
+function doConnectWeComRelay(): void {
+  if (!wecomConnParams) return;
+  const { relayUrl, authToken, gatewayId } = wecomConnParams;
+
+  const ws = new WebSocket(relayUrl);
+  wecomRelayWs = ws;
+
+  ws.on("open", () => {
+    log.info("WeCom relay: connected, sending hello");
+    wecomReconnectDelay = WECOM_RECONNECT_MIN_MS;
+    ws.send(JSON.stringify({
+      type: "hello",
+      gateway_id: gatewayId,
+      auth_token: authToken,
+    }));
+  });
+
+  ws.on("message", (data: Buffer) => {
+    try {
+      const frame = JSON.parse(data.toString("utf-8"));
+
+      if (frame.type === "ack" && frame.id === "hello") {
+        log.info("WeCom relay: authenticated — persistent connection active");
+        if (wecomRelayState) wecomRelayState.status = "active";
+        return;
+      }
+
+      if (frame.type === "binding_resolved") {
+        log.info(`WeCom relay: binding resolved for ${frame.external_user_id}`);
+        if (wecomRelayState) wecomRelayState.status = "bound";
+        return;
+      }
+
+      if (frame.type === "inbound") {
+        handleWeComInbound(frame);
+        return;
+      }
+
+      if (frame.type === "error") {
+        log.error(`WeCom relay error: ${frame.message}`);
+        return;
+      }
+    } catch (err) {
+      log.error("WeCom relay: parse error:", err);
+    }
+  });
+
+  ws.on("close", () => {
+    log.info("WeCom relay: disconnected");
+    wecomRelayWs = null;
+    if (wecomRelayState && !wecomIntentionalClose) {
+      wecomRelayState.status = "error";
+    }
+    if (!wecomIntentionalClose) {
+      scheduleWeComReconnect();
+    }
+  });
+
+  ws.on("error", (err: Error) => {
+    log.error(`WeCom relay: WS error: ${err.message}`);
+  });
+
+  ws.on("ping", (data: Buffer) => {
+    ws.pong(data);
+  });
+}
+
+function scheduleWeComReconnect(): void {
+  if (wecomReconnectTimer) clearTimeout(wecomReconnectTimer);
+  log.info(`WeCom relay: reconnecting in ${wecomReconnectDelay}ms...`);
+  wecomReconnectTimer = setTimeout(() => {
+    wecomReconnectTimer = null;
+    wecomReconnectDelay = Math.min(wecomReconnectDelay * 2, WECOM_RECONNECT_MAX_MS);
+    doConnectWeComRelay();
+  }, wecomReconnectDelay);
+}
+
+/** Forward an inbound WeCom message to the local AI agent via gateway RPC. */
+async function handleWeComInbound(frame: {
+  id: string;
+  external_user_id: string;
+  msg_type: string;
+  content: string;
+  timestamp: number;
+}): Promise<void> {
+  if (!wecomGatewayRpc || !wecomGatewayRpc.isConnected()) {
+    log.warn("WeCom: gateway RPC not connected, cannot forward message");
+    return;
+  }
+
+  const sessionKey = `agent:default:wecom:${frame.external_user_id}`;
+  log.info(`WeCom: forwarding ${frame.msg_type} from ${frame.external_user_id} to agent`);
+
+  try {
+    await wecomGatewayRpc.request("chat.send", {
+      sessionKey,
+      message: frame.content,
+      idempotencyKey: frame.id,
+    });
+  } catch (err) {
+    log.error("WeCom: chat.send failed:", err);
+  }
+}
+
+/** Handle a gateway 'chat' event — extract the AI reply and send it back to WeCom. */
+function handleWeComChatEvent(payload: unknown): void {
+  const p = payload as Record<string, unknown> | null;
+  if (!p || p.state !== "final") return;
+
+  const sessionKey = p.sessionKey as string | undefined;
+  if (!sessionKey?.startsWith("agent:default:wecom:")) return;
+
+  const externalUserId = sessionKey.slice("agent:default:wecom:".length);
+  const message = p.message as Record<string, unknown> | undefined;
+  const content = message?.content;
+
+  if (!Array.isArray(content)) return;
+
+  const texts = content
+    .filter((c: unknown) => {
+      const block = c as Record<string, unknown>;
+      return block.type === "text" && typeof block.text === "string";
+    })
+    .map((c: unknown) => (c as { text: string }).text);
+
+  const replyText = texts.join("\n\n").trim();
+  if (!replyText) return;
+
+  if (wecomRelayWs && wecomRelayWs.readyState === WebSocket.OPEN) {
+    wecomRelayWs.send(JSON.stringify({
+      type: "reply",
+      id: randomUUID(),
+      external_user_id: externalUserId,
+      content: replyText,
+    }));
+    log.info(`WeCom: reply sent to ${externalUserId} (${replyText.length} chars)`);
+  } else {
+    log.warn(`WeCom: relay WS not open, cannot send reply to ${externalUserId}`);
+  }
 }
 
 // Simple cache with TTL for usage data
@@ -289,7 +521,7 @@ async function sendTelegramMessage(chatId: string, text: string): Promise<boolea
     return false;
   }
   try {
-    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+    const res = await proxiedFetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: chatId, text }),
@@ -379,7 +611,7 @@ async function sendLineMessage(chatId: string, text: string): Promise<boolean> {
     return false;
   }
   try {
-    const res = await fetch("https://api.line.me/v2/bot/message/push", {
+    const res = await proxiedFetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -859,6 +1091,31 @@ export function startPanelServer(options: PanelServerOptions): Server {
   });
 
   server.on("close", () => pairingNotifier.stop());
+
+  // Restore WeCom relay connection from persisted credentials
+  const savedRelayUrl = storage.settings.get("wecom-relay-url");
+  if (savedRelayUrl) {
+    secretStore.get("wecom-auth-token").then((savedAuthToken) => {
+      if (!savedAuthToken) return;
+      const gwId = deviceId ?? randomUUID();
+      wecomRelayState = {
+        relayUrl: savedRelayUrl,
+        authToken: savedAuthToken,
+        status: "pending",
+      };
+      const gwInfo = getGatewayInfo?.();
+      startWeComRelay({
+        relayUrl: savedRelayUrl,
+        authToken: savedAuthToken,
+        gatewayId: gwId,
+        gatewayWsUrl: gwInfo?.wsUrl ?? "ws://127.0.0.1:28789",
+        gatewayToken: gwInfo?.token,
+      });
+      log.info("WeCom relay: restored from saved credentials");
+    }).catch((err) => {
+      log.warn("WeCom relay: failed to restore saved credentials:", err);
+    });
+  }
 
   return server;
 }
@@ -1905,6 +2162,38 @@ async function handleApiRoute(
     return;
   }
 
+  if (pathname === "/api/channels/wecom/unbind" && req.method === "DELETE") {
+    if (!wecomRelayState) {
+      sendJson(res, 200, { ok: true }); // nothing to unbind
+      return;
+    }
+
+    // Send unbind_all frame via the persistent WS if connected
+    if (wecomRelayWs && wecomRelayWs.readyState === WebSocket.OPEN && wecomConnParams) {
+      try {
+        wecomRelayWs.send(JSON.stringify({
+          type: "unbind_all",
+          gateway_id: wecomConnParams.gatewayId,
+        }));
+        // Wait for relay to process the frame before closing
+        await new Promise(r => setTimeout(r, 1000));
+      } catch (err) {
+        log.warn("WeCom unbind: failed to send unbind_all frame:", err);
+      }
+    }
+
+    // Tear down persistent connection
+    stopWeComRelay();
+    wecomRelayState = null;
+
+    // Clear persisted credentials
+    storage.settings.delete("wecom-relay-url");
+    await secretStore.delete("wecom-auth-token");
+
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
   if (pathname.startsWith("/api/channels/") && req.method === "DELETE") {
     const id = pathname.slice("/api/channels/".length);
     const deleted = storage.channels.delete(id);
@@ -2086,14 +2375,113 @@ async function handleApiRoute(
     return;
   }
 
-  // --- WeCom Channel (stubs — W15-A0) ---
+  // --- WeCom Channel ---
   if (pathname === "/api/channels/wecom/binding-status" && req.method === "GET") {
-    sendJson(res, 501, { error: "WeCom binding not implemented yet" });
+    if (!wecomRelayState) {
+      sendJson(res, 200, { status: null });
+      return;
+    }
+    // Reflect actual relay connection state
+    const relayConnected = wecomRelayWs?.readyState === WebSocket.OPEN;
+    const gatewayConnected = wecomGatewayRpc?.isConnected() ?? false;
+    sendJson(res, 200, {
+      status: wecomRelayState.status,
+      relayUrl: wecomRelayState.relayUrl,
+      bindingToken: wecomRelayState.bindingToken ?? null,
+      customerServiceUrl: wecomRelayState.customerServiceUrl ?? null,
+      relayConnected,
+      gatewayConnected,
+    });
     return;
   }
 
   if (pathname === "/api/channels/wecom/bind" && req.method === "POST") {
-    sendJson(res, 501, { error: "WeCom binding not implemented yet" });
+    const body = (await parseBody(req)) as { relayUrl?: string; authToken?: string };
+    const relayUrl = body.relayUrl?.trim();
+    const authToken = body.authToken?.trim();
+
+    if (!relayUrl || !authToken) {
+      sendJson(res, 400, { error: "Missing relayUrl or authToken" });
+      return;
+    }
+
+    const gwId = deviceId ?? randomUUID();
+
+    try {
+      const result = await new Promise<{ token: string; customerServiceUrl: string }>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          ws.close();
+          reject(new Error("Connection to relay timed out"));
+        }, 15_000);
+
+        const ws = new WebSocket(relayUrl);
+
+        ws.on("open", () => {
+          ws.send(JSON.stringify({ type: "hello", gateway_id: gwId, auth_token: authToken }));
+        });
+
+        ws.on("message", (data: Buffer) => {
+          try {
+            const frame = JSON.parse(data.toString("utf-8"));
+            if (frame.type === "ack" && frame.id === "hello") {
+              ws.send(JSON.stringify({ type: "create_binding", gateway_id: gwId }));
+            } else if (frame.type === "create_binding_ack") {
+              clearTimeout(timeout);
+              resolve({ token: frame.token, customerServiceUrl: frame.customer_service_url });
+              ws.close();
+            } else if (frame.type === "error") {
+              clearTimeout(timeout);
+              reject(new Error(frame.message ?? "Relay error"));
+              ws.close();
+            }
+          } catch (err) {
+            clearTimeout(timeout);
+            reject(err);
+            ws.close();
+          }
+        });
+
+        ws.on("error", (err: Error) => {
+          clearTimeout(timeout);
+          reject(err);
+        });
+
+        ws.on("close", () => {
+          clearTimeout(timeout);
+        });
+      });
+
+      wecomRelayState = {
+        relayUrl,
+        authToken,
+        status: "pending",
+        bindingToken: result.token,
+        customerServiceUrl: result.customerServiceUrl,
+      };
+
+      // Persist credentials so the connection survives app restarts
+      storage.settings.set("wecom-relay-url", relayUrl);
+      await secretStore.set("wecom-auth-token", authToken);
+
+      // Start persistent relay connection for message forwarding
+      const gwInfo = getGatewayInfo?.();
+      startWeComRelay({
+        relayUrl,
+        authToken,
+        gatewayId: gwId,
+        gatewayWsUrl: gwInfo?.wsUrl ?? "ws://127.0.0.1:28789",
+        gatewayToken: gwInfo?.token,
+      });
+
+      sendJson(res, 200, {
+        ok: true,
+        bindingToken: result.token,
+        customerServiceUrl: result.customerServiceUrl,
+      });
+    } catch (err) {
+      log.error("WeCom bind failed:", err);
+      sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+    }
     return;
   }
 

@@ -7,9 +7,9 @@
  * When updating the vendor submodule, diff this file against the original.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { createServer } from "node:http";
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { delimiter, dirname, join } from "node:path";
 import { homedir } from "node:os";
 
@@ -48,7 +48,23 @@ export type GeminiCliOAuthContext = {
   note: (message: string, title?: string) => Promise<void>;
   prompt: (message: string) => Promise<string>;
   progress: { update: (msg: string) => void; stop: (msg?: string) => void };
+  /** Local proxy router URL (e.g. "http://127.0.0.1:9999") for routing through system proxy. */
+  proxyUrl?: string;
 };
+
+/**
+ * Fetch through local proxy router (which handles system proxy + per-key proxy).
+ * Falls back to plain fetch when no proxy URL is configured.
+ */
+async function proxiedFetch(
+  url: string | URL,
+  init?: RequestInit,
+  proxyUrl?: string,
+): Promise<Response> {
+  if (!proxyUrl) return fetch(url, init);
+  const { ProxyAgent } = await import("undici");
+  return fetch(url, { ...init, dispatcher: new ProxyAgent(proxyUrl) } as RequestInit);
+}
 
 function resolveEnv(keys: string[]): string | undefined {
   for (const key of keys) {
@@ -241,20 +257,15 @@ function extractFromLocalInstall(): { clientId: string; clientSecret: string } |
  * Install Gemini CLI to ~/.easyclaw/gemini-cli/ using npm.
  * Returns true on success, false on failure.
  */
-export async function installGeminiCliLocal(
+async function installViaNpm(
   onProgress?: (msg: string) => void,
 ): Promise<boolean> {
-  mkdirSync(LOCAL_GEMINI_DIR, { recursive: true });
-
-  onProgress?.("Installing Gemini CLI...");
-
-  // Resolve npm's absolute path — execFile resolves the binary in the parent
-  // process's PATH, not the child env's PATH, so we must find it ourselves.
   const npmBin = findInPath("npm");
   if (!npmBin) {
-    onProgress?.("Gemini CLI install failed: npm not found in PATH");
     return false;
   }
+
+  onProgress?.("Installing Gemini CLI via npm...");
 
   return new Promise<boolean>((resolve) => {
     const child = execFile(
@@ -263,10 +274,9 @@ export async function installGeminiCliLocal(
       { timeout: 120_000, env: { ...process.env, NODE_ENV: "", PATH: enrichedPath() } },
       (err) => {
         if (err) {
-          onProgress?.(`Gemini CLI install failed: ${err.message}`);
+          onProgress?.(`npm install failed: ${err.message}`);
           resolve(false);
         } else {
-          // Clear the credential cache so next call picks up the new install
           cachedGeminiCliCredentials = null;
           onProgress?.("Gemini CLI installed successfully");
           resolve(true);
@@ -277,6 +287,85 @@ export async function installGeminiCliLocal(
       // Suppress npm stderr noise
     });
   });
+}
+
+/**
+ * Download @google/gemini-cli-core directly from npm registry (no npm needed).
+ * Only extracts the package to LOCAL_GEMINI_DIR so extractFromLocalInstall() can
+ * find the OAuth credentials in oauth2.js.
+ */
+async function installViaDirectDownload(
+  onProgress?: (msg: string) => void,
+  proxyUrl?: string,
+): Promise<boolean> {
+  try {
+    onProgress?.("Downloading Gemini CLI from npm registry...");
+
+    // 1. Get package metadata to find tarball URL
+    const metaRes = await proxiedFetch("https://registry.npmjs.org/@google/gemini-cli-core/latest", undefined, proxyUrl);
+    if (!metaRes.ok) {
+      onProgress?.(`Failed to fetch package metadata: ${metaRes.status}`);
+      return false;
+    }
+    const meta = (await metaRes.json()) as { dist?: { tarball?: string } };
+    const tarballUrl = meta.dist?.tarball;
+    if (!tarballUrl) {
+      onProgress?.("No tarball URL in package metadata");
+      return false;
+    }
+
+    // 2. Download tarball
+    onProgress?.("Downloading gemini-cli-core...");
+    const tarRes = await proxiedFetch(tarballUrl, undefined, proxyUrl);
+    if (!tarRes.ok) {
+      onProgress?.(`Failed to download tarball: ${tarRes.status}`);
+      return false;
+    }
+    const buffer = Buffer.from(await tarRes.arrayBuffer());
+
+    // 3. Extract using tar (available on all macOS/Linux systems)
+    const targetDir = join(LOCAL_GEMINI_DIR, "node_modules", "@google", "gemini-cli-core");
+    mkdirSync(targetDir, { recursive: true });
+
+    const tmpFile = join(LOCAL_GEMINI_DIR, "_tmp_gemini-cli-core.tgz");
+    writeFileSync(tmpFile, buffer);
+
+    try {
+      // npm tarballs contain a "package/" prefix — strip it
+      execFileSync("tar", ["xzf", tmpFile, "-C", targetDir, "--strip-components=1"], {
+        timeout: 30_000,
+      });
+    } finally {
+      try { unlinkSync(tmpFile); } catch { /* ignore */ }
+    }
+
+    cachedGeminiCliCredentials = null;
+    onProgress?.("Gemini CLI core downloaded successfully");
+    return true;
+  } catch (err) {
+    onProgress?.(`Direct download failed: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
+  }
+}
+
+/**
+ * Install Gemini CLI credentials to ~/.easyclaw/gemini-cli/.
+ * Tries npm first, falls back to direct tarball download from npm registry.
+ */
+export async function installGeminiCliLocal(
+  onProgress?: (msg: string) => void,
+  proxyUrl?: string,
+): Promise<boolean> {
+  mkdirSync(LOCAL_GEMINI_DIR, { recursive: true });
+
+  // Try npm first (installs full package with all dependencies)
+  if (findInPath("npm")) {
+    const ok = await installViaNpm(onProgress);
+    if (ok) return true;
+  }
+
+  // Fallback: download just gemini-cli-core directly (no npm needed)
+  return installViaDirectDownload(onProgress, proxyUrl);
 }
 
 /**
@@ -472,6 +561,7 @@ async function waitForLocalCallback(params: {
 async function exchangeCodeForTokens(
   code: string,
   verifier: string,
+  proxyUrl?: string,
 ): Promise<GeminiCliOAuthCredentials> {
   const { clientId, clientSecret } = resolveOAuthClientConfig();
   const body = new URLSearchParams({
@@ -485,11 +575,11 @@ async function exchangeCodeForTokens(
     body.set("client_secret", clientSecret);
   }
 
-  const response = await fetch(TOKEN_URL, {
+  const response = await proxiedFetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
-  });
+  }, proxyUrl);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -506,8 +596,8 @@ async function exchangeCodeForTokens(
     throw new Error("No refresh token received. Please try again.");
   }
 
-  const email = await getUserEmail(data.access_token);
-  const projectId = await discoverProject(data.access_token);
+  const email = await getUserEmail(data.access_token, proxyUrl);
+  const projectId = await discoverProject(data.access_token, proxyUrl);
   const expiresAt = Date.now() + data.expires_in * 1000 - 5 * 60 * 1000;
 
   return {
@@ -519,11 +609,11 @@ async function exchangeCodeForTokens(
   };
 }
 
-async function getUserEmail(accessToken: string): Promise<string | undefined> {
+async function getUserEmail(accessToken: string, proxyUrl?: string): Promise<string | undefined> {
   try {
-    const response = await fetch(USERINFO_URL, {
+    const response = await proxiedFetch(USERINFO_URL, {
       headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    }, proxyUrl);
     if (response.ok) {
       const data = (await response.json()) as { email?: string };
       return data.email;
@@ -534,7 +624,7 @@ async function getUserEmail(accessToken: string): Promise<string | undefined> {
   return undefined;
 }
 
-async function discoverProject(accessToken: string): Promise<string> {
+async function discoverProject(accessToken: string, proxyUrl?: string): Promise<string> {
   const envProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT_ID;
   const headers = {
     Authorization: `Bearer ${accessToken}`,
@@ -560,11 +650,11 @@ async function discoverProject(accessToken: string): Promise<string> {
   } = {};
 
   try {
-    const response = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal:loadCodeAssist`, {
+    const response = await proxiedFetch(`${CODE_ASSIST_ENDPOINT}/v1internal:loadCodeAssist`, {
       method: "POST",
       headers,
       body: JSON.stringify(loadBody),
-    });
+    }, proxyUrl);
 
     if (!response.ok) {
       const errorPayload = await response.json().catch(() => null);
@@ -620,11 +710,11 @@ async function discoverProject(accessToken: string): Promise<string> {
     (onboardBody.metadata as Record<string, unknown>).duetProject = envProject;
   }
 
-  const onboardResponse = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal:onboardUser`, {
+  const onboardResponse = await proxiedFetch(`${CODE_ASSIST_ENDPOINT}/v1internal:onboardUser`, {
     method: "POST",
     headers,
     body: JSON.stringify(onboardBody),
-  });
+  }, proxyUrl);
 
   if (!onboardResponse.ok) {
     throw new Error(`onboardUser failed: ${onboardResponse.status} ${onboardResponse.statusText}`);
@@ -637,7 +727,7 @@ async function discoverProject(accessToken: string): Promise<string> {
   };
 
   if (!lro.done && lro.name) {
-    lro = await pollOperation(lro.name, headers);
+    lro = await pollOperation(lro.name, headers, proxyUrl);
   }
 
   const projectId = lro.response?.cloudaicompanionProject?.id;
@@ -685,12 +775,13 @@ function getDefaultTier(
 async function pollOperation(
   operationName: string,
   headers: Record<string, string>,
+  proxyUrl?: string,
 ): Promise<{ done?: boolean; response?: { cloudaicompanionProject?: { id?: string } } }> {
   for (let attempt = 0; attempt < 24; attempt += 1) {
     await new Promise((resolve) => setTimeout(resolve, 5000));
-    const response = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal/${operationName}`, {
+    const response = await proxiedFetch(`${CODE_ASSIST_ENDPOINT}/v1internal/${operationName}`, {
       headers,
-    });
+    }, proxyUrl);
     if (!response.ok) {
       continue;
     }
@@ -740,7 +831,7 @@ export async function loginGeminiCliOAuth(
       throw new Error("OAuth state mismatch - please try again");
     }
     ctx.progress.update("Exchanging authorization code for tokens...");
-    return exchangeCodeForTokens(parsed.code, verifier);
+    return exchangeCodeForTokens(parsed.code, verifier, ctx.proxyUrl);
   }
 
   ctx.progress.update("Complete sign-in in browser...");
@@ -757,7 +848,7 @@ export async function loginGeminiCliOAuth(
       onProgress: (msg) => ctx.progress.update(msg),
     });
     ctx.progress.update("Exchanging authorization code for tokens...");
-    return await exchangeCodeForTokens(code, verifier);
+    return await exchangeCodeForTokens(code, verifier, ctx.proxyUrl);
   } catch (err) {
     if (
       err instanceof Error &&
@@ -776,7 +867,7 @@ export async function loginGeminiCliOAuth(
         throw new Error("OAuth state mismatch - please try again", { cause: err });
       }
       ctx.progress.update("Exchanging authorization code for tokens...");
-      return exchangeCodeForTokens(parsed.code, verifier);
+      return exchangeCodeForTokens(parsed.code, verifier, ctx.proxyUrl);
     }
     throw err;
   }
