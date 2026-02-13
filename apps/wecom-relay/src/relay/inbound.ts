@@ -6,6 +6,7 @@ import { registry } from "../ws/server.js";
 import { encodeFrame } from "../ws/protocol.js";
 import { getBindingStore } from "../index.js";
 import { getAccessToken } from "../wecom/access-token.js";
+import { downloadMedia } from "../wecom/download-media.js";
 import { sendTextMessage } from "../wecom/send-message.js";
 
 const log = createLogger("relay:inbound");
@@ -120,6 +121,8 @@ export async function handleInboundMessages(
     // Build and send inbound frame
     let content: string;
     let msgType: string;
+    let mediaData: string | undefined;
+    let mediaMime: string | undefined;
 
     switch (msg.msgtype) {
       case "text":
@@ -133,6 +136,16 @@ export async function handleInboundMessages(
       case "voice":
         content = msg.media_id;
         msgType = "voice";
+        try {
+          const accessToken = await getAccessToken(config.WECOM_CORPID, config.WECOM_APP_SECRET);
+          const media = await downloadMedia(accessToken, msg.media_id);
+          mediaData = media.data.toString("base64");
+          mediaMime = media.contentType;
+          content = ""; // Clear media_id from content; the audio data is in media_data
+        } catch (err) {
+          log.error(`Failed to download voice media ${msg.media_id}: ${err}`);
+          // Fall back: content stays as media_id, no media_data
+        }
         break;
       default:
         content = "";
@@ -146,6 +159,8 @@ export async function handleInboundMessages(
       msg_type: msgType,
       content,
       timestamp: msg.send_time,
+      media_data: mediaData,
+      media_mime: mediaMime,
     };
 
     ws.send(encodeFrame(frame));

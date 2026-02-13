@@ -13,6 +13,10 @@ export interface InboundFrame {
   msg_type: string;
   content: string;
   timestamp: number;
+  /** Base64-encoded media data (for voice/image messages). */
+  media_data?: string;
+  /** MIME type of the media (e.g. "audio/amr"). */
+  media_mime?: string;
 }
 
 export interface ReplyFrame {

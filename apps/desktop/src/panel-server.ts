@@ -15,9 +15,37 @@ import type { ChannelsStatusSnapshot } from "@easyclaw/core";
 import { removeSkillFile } from "@easyclaw/rules";
 import { promises as fs } from "node:fs";
 import { homedir } from "node:os";
+import { execFile } from "node:child_process";
 import WebSocket from "ws";
 
 const log = createLogger("panel-server");
+
+/** Supported formats that Groq Whisper accepts directly (no conversion needed). */
+const STT_SUPPORTED_FORMATS = new Set(["flac", "mp3", "mp4", "mpeg", "mpga", "m4a", "ogg", "wav", "webm"]);
+
+/**
+ * Convert audio to MP3 using ffmpeg (piped via stdin/stdout).
+ * Returns the converted buffer and "mp3" format string.
+ * Falls back to the original buffer if ffmpeg is unavailable.
+ */
+function convertAudioToMp3(input: Buffer, inputFormat: string): Promise<{ data: Buffer; format: string }> {
+  return new Promise((resolve) => {
+    const proc = execFile(
+      "ffmpeg",
+      ["-i", `pipe:0`, "-f", inputFormat, "-f", "mp3", "-ac", "1", "-ar", "16000", "pipe:1"],
+      { encoding: "buffer", maxBuffer: 10 * 1024 * 1024, timeout: 15_000 },
+      (err, stdout) => {
+        if (err || !stdout || stdout.length === 0) {
+          log.warn(`ffmpeg conversion failed (${err?.message ?? "empty output"}), trying raw`);
+          resolve({ data: input, format: inputFormat });
+          return;
+        }
+        resolve({ data: stdout as unknown as Buffer, format: "mp3" });
+      },
+    );
+    proc.stdin?.end(input);
+  });
+}
 
 /**
  * Fetch through local proxy router so GFW-blocked APIs (Telegram, LINE, etc.)
@@ -97,6 +125,9 @@ let wecomReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let wecomReconnectDelay = WECOM_RECONNECT_MIN_MS;
 let wecomIntentionalClose = false;
 let wecomGatewayRpc: GatewayRpcClient | null = null;
+
+// STT manager reference for voice transcription (set during startPanelServer)
+let wecomSttManager: { transcribe(audio: Buffer, format: string): Promise<string | null>; isEnabled(): boolean } | null = null;
 
 // Cached connection params for reconnects
 let wecomConnParams: {
@@ -241,6 +272,8 @@ async function handleWeComInbound(frame: {
   msg_type: string;
   content: string;
   timestamp: number;
+  media_data?: string;
+  media_mime?: string;
 }): Promise<void> {
   if (!wecomGatewayRpc || !wecomGatewayRpc.isConnected()) {
     log.warn("WeCom: gateway RPC not connected, cannot forward message");
@@ -251,11 +284,48 @@ async function handleWeComInbound(frame: {
   wecomUserIdCaseMap.set(frame.external_user_id.toLowerCase(), frame.external_user_id);
   log.info(`WeCom: forwarding ${frame.msg_type} from ${frame.external_user_id} to agent`);
 
+  let message = frame.content;
+
+  // Transcribe voice messages using the STT manager
+  if (frame.msg_type === "voice" && frame.media_data) {
+    if (wecomSttManager?.isEnabled()) {
+      try {
+        let audioBuffer = Buffer.from(frame.media_data, "base64");
+        // WeCom voice is AMR format; extract format hint from MIME or default to "amr"
+        let format = frame.media_mime?.split("/").pop()?.split(";")[0] ?? "amr";
+
+        // Convert unsupported formats (e.g. AMR) to MP3 via ffmpeg
+        if (!STT_SUPPORTED_FORMATS.has(format.toLowerCase())) {
+          log.info(`WeCom: converting ${format} → mp3 via ffmpeg`);
+          const converted = await convertAudioToMp3(audioBuffer, format);
+          audioBuffer = converted.data;
+          format = converted.format;
+        }
+
+        log.info(`WeCom: transcribing voice (${audioBuffer.length} bytes, format=${format})`);
+        const transcribed = await wecomSttManager.transcribe(audioBuffer, format);
+        if (transcribed) {
+          message = transcribed;
+          log.info(`WeCom: voice transcribed: ${transcribed.substring(0, 80)}...`);
+        } else {
+          message = "[语音消息 - 转写失败]";
+          log.warn("WeCom: voice transcription returned null");
+        }
+      } catch (err) {
+        log.error("WeCom: voice transcription error:", err);
+        message = "[语音消息 - 转写失败]";
+      }
+    } else {
+      log.warn("WeCom: STT not enabled, cannot transcribe voice message");
+      message = "[语音消息 - 语音转文字服务未启用]";
+    }
+  }
+
   try {
     await wecomGatewayRpc.request("agent", {
       sessionKey,
       channel: "wechat",
-      message: frame.content,
+      message,
       idempotencyKey: frame.id,
     });
   } catch (err) {
@@ -1036,6 +1106,11 @@ export function startPanelServer(options: PanelServerOptions): Server {
   const port = options.port ?? 3210;
   const distDir = resolve(options.panelDistDir);
   const { storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, onOAuthFlow, onOAuthAcquire, onOAuthSave, onTelemetryTrack, vendorDir, deviceId, getUpdateResult, getGatewayInfo, changelogPath } = options;
+
+  // Store STT manager reference so WeCom voice handler can use it
+  if (sttManager) {
+    wecomSttManager = sttManager;
+  }
 
   // Read changelog.json once at startup (cached in closure)
   let changelogEntries: unknown[] = [];
