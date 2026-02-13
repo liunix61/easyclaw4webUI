@@ -106,7 +106,7 @@ async function processCallback(
   // Only process kf_msg_or_event events
   if (event.MsgType === "event" && event.Event === "kf_msg_or_event") {
     const accessToken = await getAccessToken(config.WECOM_CORPID, config.WECOM_APP_SECRET);
-    const messages = await syncMessages(accessToken, config.WECOM_OPEN_KFID, event.Token);
+    const messages = await syncMessages(accessToken, event.Token);
 
     await handleInboundMessages(messages, config);
   }

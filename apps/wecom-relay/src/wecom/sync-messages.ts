@@ -37,7 +37,6 @@ let syncCursor = "";
  */
 export async function syncMessages(
   accessToken: string,
-  openKfId: string,
   token?: string,
 ): Promise<WeComMessage[]> {
   const url = `${WECOM_API_BASE}/cgi-bin/kf/sync_msg?access_token=${encodeURIComponent(accessToken)}`;
@@ -50,10 +49,6 @@ export async function syncMessages(
 
   if (token) {
     body.token = token;
-  }
-
-  if (openKfId) {
-    body.open_kfid = openKfId;
   }
 
   log.info("Syncing messages from WeCom");
