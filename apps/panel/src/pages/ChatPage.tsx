@@ -18,9 +18,13 @@ type ChatMessage = {
 
 type PendingImage = { dataUrl: string; base64: string; mimeType: string };
 
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB
-const MAX_WS_PAYLOAD_BYTES = 7 * 1024 * 1024; // client-side guard: keep under gateway WS frame limit
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5MB — input file size limit before compression
+const MAX_WS_PAYLOAD_BYTES = 400 * 1024; // client-side guard: keep well under gateway's 512KB WS frame limit
 const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+const COMPRESS_MAX_DIMENSION = 1280; // resize longest side to this
+const COMPRESS_TARGET_BYTES = 300 * 1024; // target base64 size after compression
+const COMPRESS_INITIAL_QUALITY = 0.85;
+const COMPRESS_MIN_QUALITY = 0.4;
 
 const DEFAULT_SESSION_KEY = "agent:main:main";
 const INITIAL_VISIBLE = 50;
@@ -652,6 +656,46 @@ export function ChatPage({ onAgentNameChange }: { onAgentNameChange?: (name: str
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showEmojiPicker]);
 
+  /**
+   * Compress an image using canvas: resize to max dimension and encode as JPEG.
+   * Progressively lowers quality until the base64 output fits the target size.
+   */
+  function compressImage(dataUrl: string): Promise<PendingImage | null> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > COMPRESS_MAX_DIMENSION || height > COMPRESS_MAX_DIMENSION) {
+          const scale = COMPRESS_MAX_DIMENSION / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(null); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const mimeType = "image/jpeg";
+        let quality = COMPRESS_INITIAL_QUALITY;
+        let resultDataUrl = canvas.toDataURL(mimeType, quality);
+        let base64 = resultDataUrl.split(",")[1] ?? "";
+
+        // Progressively reduce quality if over target
+        while (base64.length > COMPRESS_TARGET_BYTES && quality > COMPRESS_MIN_QUALITY) {
+          quality -= 0.1;
+          resultDataUrl = canvas.toDataURL(mimeType, quality);
+          base64 = resultDataUrl.split(",")[1] ?? "";
+        }
+
+        resolve({ dataUrl: resultDataUrl, base64, mimeType });
+      };
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
   function readFileAsBase64(file: File): Promise<PendingImage | null> {
     return new Promise((resolve) => {
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
@@ -663,11 +707,16 @@ export function ChatPage({ onAgentNameChange }: { onAgentNameChange?: (name: str
         return;
       }
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const dataUrl = reader.result as string;
-        // Strip "data:image/png;base64," prefix to get raw base64
         const base64 = dataUrl.split(",")[1] ?? "";
-        resolve({ dataUrl, base64, mimeType: file.type });
+        // If already small enough, use as-is
+        if (base64.length <= COMPRESS_TARGET_BYTES) {
+          resolve({ dataUrl, base64, mimeType: file.type });
+          return;
+        }
+        // Compress large images
+        resolve(await compressImage(dataUrl));
       };
       reader.onerror = () => resolve(null);
       reader.readAsDataURL(file);
