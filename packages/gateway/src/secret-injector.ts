@@ -1,6 +1,6 @@
 import type { SecretStore } from "@easyclaw/secrets";
 import type { Storage } from "@easyclaw/storage";
-import { ALL_PROVIDERS, PROVIDER_ENV_VARS, providerSecretKey } from "@easyclaw/core";
+import { ALL_PROVIDERS, PROVIDERS, providerSecretKey } from "@easyclaw/core";
 import { createLogger } from "@easyclaw/logger";
 
 const log = createLogger("gateway:secret-injector");
@@ -49,7 +49,7 @@ export async function resolveSecretEnv(
         env["ANTHROPIC_OAUTH_TOKEN"] = value;
         log.debug("Injecting secret: " + secretKey + " -> ANTHROPIC_OAUTH_TOKEN (OAuth token detected)");
       } else {
-        const envVar = PROVIDER_ENV_VARS[provider];
+        const envVar = PROVIDERS[provider].envVar;
         env[envVar] = value;
         log.debug("Injecting secret: " + secretKey + " -> " + envVar);
       }

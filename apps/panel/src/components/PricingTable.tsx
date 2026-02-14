@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
-import { PROVIDER_URLS, PROVIDER_LABELS } from "@easyclaw/core";
+import { PROVIDERS } from "@easyclaw/core";
 import type { LLMProvider } from "@easyclaw/core";
-import type { ProviderPricing } from "../api.js";
+import type { ProviderPricing, Plan } from "../api.js";
 
 function isFree(price: string): boolean {
   return price === "0" || price === "0.00" || price === "—";
@@ -20,7 +20,7 @@ export function PricingTable({
 
   const data = pricingList?.find((p) => p.provider === provider) ?? null;
   const currencySymbol = data?.currency === "CNY" ? "¥" : "$";
-  const providerLabel = PROVIDER_LABELS[provider as LLMProvider] ?? provider;
+  const providerLabel = PROVIDERS[provider as LLMProvider]?.label ?? provider;
 
   // Find the first free model to highlight as recommended
   const recommendedId = data?.models.find(
@@ -47,7 +47,7 @@ export function PricingTable({
         <div className="pricing-status-compact">
           <div>{t("providers.pricingUnavailable")}</div>
           <a
-            href={PROVIDER_URLS[provider as LLMProvider]}
+            href={PROVIDERS[provider as LLMProvider]?.url}
             target="_blank"
             rel="noopener noreferrer"
             className="pricing-link"
@@ -124,6 +124,103 @@ export function PricingTable({
               {t("providers.pricingViewFull")} &rarr;
             </a>
           </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+export function SubscriptionPricingTable({
+  provider,
+  pricingList,
+  loading,
+}: {
+  provider: string;
+  pricingList: ProviderPricing[] | null;
+  loading: boolean;
+}) {
+  const { t } = useTranslation();
+
+  const data = pricingList?.find((p) => p.provider === provider) ?? null;
+  const plans: Plan[] = data?.plans ?? [];
+  const providerLabel = PROVIDERS[provider as LLMProvider]?.label ?? provider;
+
+  return (
+    <div className="section-card pricing-card">
+      <h4 className="pricing-heading">
+        {providerLabel} — {t("providers.pricingPlansTitle")}
+      </h4>
+
+      {loading && (
+        <div className="pricing-status">
+          <span className="spinner" style={{ marginRight: 6 }} />
+          {t("common.loading")}
+        </div>
+      )}
+
+      {!loading && plans.length === 0 && (
+        <div className="pricing-status-compact">
+          <div>{t("providers.pricingPlansUnavailable")}</div>
+          {PROVIDERS[provider as LLMProvider]?.subscriptionUrl && (
+            <a
+              href={PROVIDERS[provider as LLMProvider]?.subscriptionUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pricing-link"
+              style={{ marginTop: 6, display: "inline-block" }}
+            >
+              {t("providers.pricingViewFull")} &rarr;
+            </a>
+          )}
+        </div>
+      )}
+
+      {!loading && plans.length > 0 && (
+        <>
+          {plans.map((plan) => {
+            const symbol = plan.currency === "CNY" ? "¥" : "$";
+            return (
+              <div key={plan.planName} className="pricing-plan-block">
+                <div className="pricing-plan-header">
+                  <span className="pricing-plan-name">{plan.planName}</span>
+                  <span className="pricing-plan-price">{symbol}{plan.price}</span>
+                </div>
+                {plan.planDetail.length > 0 && (
+                  <table className="pricing-inner-table">
+                    <thead>
+                      <tr>
+                        <th>{t("providers.pricingPlanModel")}</th>
+                        <th>{t("providers.pricingPlanVolume")}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {plan.planDetail.map((d) => (
+                        <tr key={d.modelName}>
+                          <td>{d.modelName}</td>
+                          <td className="pricing-plan-volume">{d.volume}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })}
+          <div className="pricing-disclaimer">
+            {t("providers.pricingDisclaimer")}
+          </div>
+          {data?.pricingUrl && (
+            <div style={{ marginTop: 4, flexShrink: 0 }}>
+              <a
+                href={data.pricingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="pricing-link"
+              >
+                {t("providers.pricingViewFull")} &rarr;
+              </a>
+            </div>
+          )}
         </>
       )}
     </div>

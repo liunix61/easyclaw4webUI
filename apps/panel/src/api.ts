@@ -570,11 +570,24 @@ export interface ModelPricing {
   note?: string;
 }
 
+export interface PlanDetail {
+  modelName: string;
+  volume: string;
+}
+
+export interface Plan {
+  planName: string;
+  price: string;
+  currency: string;
+  planDetail: PlanDetail[];
+}
+
 export interface ProviderPricing {
   provider: string;
   currency: string;
   pricingUrl: string;
   models: ModelPricing[];
+  plans?: Plan[];
 }
 
 function getPricingApiUrl(language: string): string {

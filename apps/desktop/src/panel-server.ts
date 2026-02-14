@@ -7,7 +7,7 @@ import { createLogger } from "@easyclaw/logger";
 import type { Storage } from "@easyclaw/storage";
 import type { SecretStore } from "@easyclaw/secrets";
 import type { ArtifactStatus, ArtifactType, LLMProvider } from "@easyclaw/core";
-import { PROVIDER_BASE_URLS, getDefaultModelForProvider, providerSecretKey, parseProxyUrl, reconstructProxyUrl } from "@easyclaw/core";
+import { PROVIDERS, getDefaultModelForProvider, providerSecretKey, parseProxyUrl, reconstructProxyUrl } from "@easyclaw/core";
 import { readFullModelCatalog, resolveOpenClawConfigPath, readExistingConfig, resolveOpenClawStateDir, GatewayRpcClient, writeChannelAccount, removeChannelAccount, syncPermissions } from "@easyclaw/gateway";
 import { loadCostUsageSummary, discoverAllSessions, loadSessionCostSummary } from "../../../vendor/openclaw/src/infra/session-cost-usage.js";
 import type { CostUsageSummary, SessionCostSummary } from "../../../vendor/openclaw/src/infra/session-cost-usage.js";
@@ -345,7 +345,7 @@ async function handleWeComInbound(frame: {
     try {
       await fs.mkdir(mediaDir, { recursive: true });
       await fs.writeFile(filePath, Buffer.from(frame.media_data, "base64"));
-      message = `[用户发来图片，已保存至 ${filePath}]`;
+      message = `用户发来了一张图片，请查看并回应。图片已保存至 ${filePath}`;
       log.info(`WeCom: saved inbound image to ${filePath}`);
     } catch (err) {
       log.error(`WeCom: failed to save inbound image: ${err}`);
@@ -462,7 +462,8 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
   }
 
   // Read media files from disk and prepare image payloads
-  const images: Array<{ data: string; mimeType: string }> = [];
+  const images: Array<{ data: string; mimeType: string; savedName?: string }> = [];
+  const outboundDir = join(homedir(), ".easyclaw", "openclaw", "media", "outbound");
   for (const filePath of mediaFiles) {
     try {
       const data = await fs.readFile(filePath);
@@ -472,9 +473,18 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
         ".png": "image/png", ".gif": "image/gif",
         ".webp": "image/webp", ".bmp": "image/bmp",
       };
+      // Save a copy to outbound dir so it's accessible via /api/media/
+      const savedName = `wecom-${Date.now()}-${randomUUID().slice(0, 8)}${ext || ".png"}`;
+      try {
+        await fs.mkdir(outboundDir, { recursive: true });
+        await fs.writeFile(join(outboundDir, savedName), data);
+      } catch (saveErr) {
+        log.warn(`WeCom: failed to save outbound image copy: ${saveErr}`);
+      }
       images.push({
         data: data.toString("base64"),
         mimeType: mimeMap[ext] ?? "image/png",
+        savedName,
       });
     } catch (err) {
       log.error(`WeCom: failed to read media file ${filePath}: ${err}`);
@@ -482,8 +492,8 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
   }
 
   if (wecomRelayWs && wecomRelayWs.readyState === WebSocket.OPEN) {
-    // Send text reply (with MEDIA: directives stripped)
-    const replyText = cleanedTexts.join("\n\n").trim();
+    // Send text reply (with MEDIA: directives and NO_REPLY stripped)
+    const replyText = cleanedTexts.join("\n\n").replace(/\bNO_REPLY\b/g, "").trim();
     if (replyText) {
       wecomRelayWs.send(JSON.stringify({
         type: "reply",
@@ -507,6 +517,23 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
     }
   } else {
     log.warn(`WeCom: relay WS not open, cannot send reply to ${externalUserId}`);
+  }
+
+  // Inject image references into session transcript so ChatPage can display them.
+  // Uses chat.inject to write a markdown image reference that ChatPage renders.
+  const imageRefs = images
+    .filter((img) => img.savedName)
+    .map((img) => `![📷](/api/media/outbound/${img.savedName})`);
+  if (imageRefs.length > 0 && wecomGatewayRpc) {
+    try {
+      await wecomGatewayRpc.request("chat.inject", {
+        sessionKey: "agent:main:main",
+        message: imageRefs.join("\n"),
+      });
+      log.info(`WeCom: injected ${imageRefs.length} image ref(s) into chat transcript`);
+    } catch (err) {
+      log.warn(`WeCom: failed to inject image refs: ${err}`);
+    }
   }
 }
 
@@ -1105,10 +1132,11 @@ async function validateProviderApiKey(
   apiKey: string,
   proxyUrl?: string,
 ): Promise<{ valid: boolean; error?: string }> {
-  const baseUrl = PROVIDER_BASE_URLS[provider as LLMProvider];
-  if (!baseUrl) {
+  const meta = PROVIDERS[provider as LLMProvider];
+  if (!meta) {
     return { valid: false, error: "Unknown provider" };
   }
+  const baseUrl = meta.baseUrl;
 
   // Amazon Bedrock uses AWS Sig v4 — skip validation
   if (provider === "amazon-bedrock") {
@@ -1287,6 +1315,37 @@ export function startPanelServer(options: PanelServerOptions): Server {
     if (req.method === "OPTIONS") {
       res.writeHead(204);
       res.end();
+      return;
+    }
+
+    // Serve media files from ~/.easyclaw/openclaw/media/
+    if (pathname.startsWith("/api/media/") && req.method === "GET") {
+      const mediaBase = join(homedir(), ".easyclaw", "openclaw", "media");
+      const relPath = decodeURIComponent(pathname.replace("/api/media/", ""));
+      const absPath = resolve(mediaBase, relPath);
+      // Security: ensure resolved path is within mediaBase
+      if (!absPath.startsWith(mediaBase + "/")) {
+        res.writeHead(403);
+        res.end("Forbidden");
+        return;
+      }
+      try {
+        const data = readFileSync(absPath);
+        const ext = extname(absPath).toLowerCase();
+        const mimeMap: Record<string, string> = {
+          ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+          ".png": "image/png", ".gif": "image/gif",
+          ".webp": "image/webp", ".bmp": "image/bmp",
+        };
+        res.writeHead(200, {
+          "Content-Type": mimeMap[ext] ?? "application/octet-stream",
+          "Cache-Control": "private, max-age=86400",
+        });
+        res.end(data);
+      } catch {
+        res.writeHead(404);
+        res.end("Not found");
+      }
       return;
     }
 

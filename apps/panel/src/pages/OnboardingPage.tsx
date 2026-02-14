@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { PROVIDER_API_KEY_URLS, PROVIDER_SUBSCRIPTION_URLS, getDefaultModelForProvider } from "@easyclaw/core";
+import { PROVIDERS, getDefaultModelForProvider } from "@easyclaw/core";
 import type { LLMProvider } from "@easyclaw/core";
 import { updateSettings, createProviderKey, validateApiKey, fetchPricing, trackEvent, startOAuthFlow, saveOAuthFlow } from "../api.js";
 import type { ProviderPricing } from "../api.js";
@@ -36,7 +36,7 @@ export function OnboardingPage({
   const [currentStep, setCurrentStep] = useState(0);
 
   // Step 0 state
-  const defaultProv = i18n.language === "zh" ? "zhipu" : "openai";
+  const defaultProv = i18n.language === "zh" ? "zhipu-coding" : "google-gemini-cli";
   const [provider, setProvider] = useState(defaultProv);
   const [model, setModel] = useState(getDefaultModelForProvider(defaultProv as LLMProvider)?.modelId ?? "");
   const [apiKey, setApiKey] = useState("");
@@ -230,15 +230,15 @@ export function OnboardingPage({
               {!isOAuthProvider && (
               <div className="form-help-sm provider-links">
                 <a
-                  href={PROVIDER_API_KEY_URLS[provider as LLMProvider]}
+                  href={PROVIDERS[provider as LLMProvider]?.apiKeyUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                 >
                   {t("providers.getApiKey")} &rarr;
                 </a>
-                {PROVIDER_SUBSCRIPTION_URLS[provider as LLMProvider] && (
+                {PROVIDERS[provider as LLMProvider]?.subscriptionUrl && (
                   <a
-                    href={PROVIDER_SUBSCRIPTION_URLS[provider as LLMProvider]}
+                    href={PROVIDERS[provider as LLMProvider]?.subscriptionUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

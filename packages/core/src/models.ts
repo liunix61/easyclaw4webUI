@@ -5,6 +5,7 @@ export type LLMProvider =
   | "google"
   | "deepseek"
   | "zhipu"
+  | "zhipu-coding"
   | "zai"
   | "moonshot"
   | "qwen"
@@ -16,142 +17,8 @@ export type LLMProvider =
   | "venice"
   | "xiaomi"
   | "volcengine"
-  | "amazon-bedrock";
-
-/** Display names for all providers. */
-export const PROVIDER_LABELS: Record<LLMProvider, string> = {
-  openai: "OpenAI",
-  anthropic: "Anthropic",
-  google: "Google (Gemini)",
-  deepseek: "DeepSeek",
-  zhipu: "Zhipu (GLM)",
-  zai: "Z.ai (GLM)",
-  moonshot: "Moonshot (Kimi)",
-  qwen: "Qwen",
-  groq: "Groq",
-  mistral: "Mistral",
-  xai: "xAI (Grok)",
-  openrouter: "OpenRouter",
-  minimax: "MiniMax",
-  venice: "Venice AI",
-  xiaomi: "Xiaomi",
-  volcengine: "Volcengine (Doubao)",
-  "amazon-bedrock": "Amazon Bedrock",
-};
-
-/** Ordered list of all providers. */
-export const ALL_PROVIDERS: LLMProvider[] = Object.keys(
-  PROVIDER_LABELS,
-) as LLMProvider[];
-
-/**
- * OpenAI-compatible API base URLs for each provider.
- * Most providers expose a /chat/completions endpoint compatible with the OpenAI format.
- */
-export const PROVIDER_BASE_URLS: Record<LLMProvider, string> = {
-  openai: "https://api.openai.com/v1",
-  anthropic: "https://api.anthropic.com/v1",
-  google: "https://generativelanguage.googleapis.com/v1beta/openai",
-  deepseek: "https://api.deepseek.com/v1",
-  zhipu: "https://open.bigmodel.cn/api/paas/v4",
-  zai: "https://api.z.ai/api/paas/v4",
-  moonshot: "https://api.moonshot.cn/v1",
-  qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-  groq: "https://api.groq.com/openai/v1",
-  mistral: "https://api.mistral.ai/v1",
-  xai: "https://api.x.ai/v1",
-  openrouter: "https://openrouter.ai/api/v1",
-  minimax: "https://api.minimax.chat/v1",
-  venice: "https://api.venice.ai/api/v1",
-  xiaomi: "https://api.xiaomi.com/v1",
-  volcengine: "https://ark.cn-beijing.volces.com/api/v3",
-  "amazon-bedrock": "https://bedrock-runtime.us-east-1.amazonaws.com",
-};
-
-/** Pricing / official page URLs for each provider. */
-export const PROVIDER_URLS: Record<LLMProvider, string> = {
-  openai: "https://openai.com/api/pricing/",
-  anthropic: "https://www.anthropic.com/pricing",
-  google: "https://ai.google.dev/pricing",
-  deepseek: "https://platform.deepseek.com/api-docs/pricing",
-  zhipu: "https://open.bigmodel.cn/pricing",
-  zai: "https://docs.z.ai/guides/overview/pricing",
-  moonshot: "https://platform.moonshot.cn/docs/pricing/chat",
-  qwen: "https://help.aliyun.com/zh/model-studio/getting-started/models",
-  groq: "https://groq.com/pricing/",
-  mistral: "https://mistral.ai/pricing",
-  xai: "https://docs.x.ai/docs/models#models-and-pricing",
-  openrouter: "https://openrouter.ai/models",
-  minimax: "https://platform.minimaxi.com/document/Price",
-  venice: "https://venice.ai/pricing",
-  xiaomi: "https://mimo.xiaomi.com/",
-  volcengine: "https://www.volcengine.com/pricing?product=ark_bd&tab=1",
-  "amazon-bedrock": "https://aws.amazon.com/bedrock/pricing/",
-};
-
-/**
- * URL where users can create / manage API keys for each provider.
- */
-export const PROVIDER_API_KEY_URLS: Record<LLMProvider, string> = {
-  openai: "https://platform.openai.com/api-keys",
-  anthropic: "https://console.anthropic.com/settings/keys",
-  google: "https://aistudio.google.com/app/apikey",
-  deepseek: "https://platform.deepseek.com/api_keys",
-  zhipu: "https://open.bigmodel.cn/usercenter/apikeys",
-  zai: "https://open.bigmodel.cn/usercenter/apikeys",
-  moonshot: "https://platform.moonshot.cn/console/api-keys",
-  qwen: "https://bailian.console.aliyun.com/#/model-market/api-key",
-  groq: "https://console.groq.com/keys",
-  mistral: "https://console.mistral.ai/api-keys",
-  xai: "https://console.x.ai/team/default/api-keys",
-  openrouter: "https://openrouter.ai/settings/keys",
-  minimax: "https://platform.minimaxi.com/user-center/basic-information/interface-key",
-  venice: "https://venice.ai/settings/api",
-  xiaomi: "https://mimo.xiaomi.com/",
-  volcengine: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
-  "amazon-bedrock": "https://console.aws.amazon.com/iam/home#/security_credentials",
-};
-
-/**
- * Optional subscription / pricing-plan URLs per provider.
- * Only providers with an affiliate or subscription link are populated.
- */
-export const PROVIDER_SUBSCRIPTION_URLS: Partial<Record<LLMProvider, string>> = {
-  zhipu: "https://www.bigmodel.cn/glm-coding?ic=QWUW9KBBBL",
-  zai: "https://www.bigmodel.cn/glm-coding?ic=QWUW9KBBBL",
-};
-
-/**
- * Maps each provider to its well-known environment variable name.
- * Used by the secret injector to pass API keys to the gateway process.
- */
-export const PROVIDER_ENV_VARS: Record<LLMProvider, string> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GEMINI_API_KEY", // OpenClaw expects GEMINI_API_KEY for google provider
-  deepseek: "DEEPSEEK_API_KEY",
-  zhipu: "ZHIPU_API_KEY",
-  zai: "ZAI_API_KEY",
-  moonshot: "MOONSHOT_API_KEY",
-  qwen: "DASHSCOPE_API_KEY",
-  groq: "GROQ_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  xai: "XAI_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  minimax: "MINIMAX_API_KEY",
-  venice: "VENICE_API_KEY",
-  xiaomi: "XIAOMI_API_KEY",
-  volcengine: "ARK_API_KEY",
-  "amazon-bedrock": "AWS_ACCESS_KEY_ID",
-};
-
-/**
- * Maps each provider to the settings key used to store its API key.
- * e.g. "openai" -> "openai-api-key"
- */
-export function providerSecretKey(provider: LLMProvider): string {
-  return `${provider}-api-key`;
-}
+  | "amazon-bedrock"
+  | "google-gemini-cli";
 
 /** Per-million-token cost in USD for OpenClaw usage tracking. */
 export interface ModelCost {
@@ -166,19 +33,39 @@ export interface ModelConfig {
   provider: LLMProvider;
   modelId: string;
   displayName: string;
-  /** Cost in USD per million tokens. Converted from CNY at ~7.3 CNY/USD where applicable. */
+  /** Cost in USD per million tokens. Converted from CNY at ~7.0 CNY/USD where applicable. */
   cost?: ModelCost;
   /** Whether this model supports image/vision input. Defaults to false for extra models. */
   supportsVision?: boolean;
 }
 
-/** Known regions. */
-export type Region = "us" | "eu" | "cn" | (string & {});
+/** Unified metadata for a single LLM provider. */
+export interface ProviderMeta {
+  /** Display name (e.g. "OpenAI"). */
+  label: string;
+  /** OpenAI-compatible API base URL. */
+  baseUrl: string;
+  /** Pricing / official page URL. */
+  url: string;
+  /** URL where users can create / manage API keys. */
+  apiKeyUrl: string;
+  /** Well-known environment variable name for the API key. */
+  envVar: string;
+  /** Optional subscription / pricing-plan URL. */
+  subscriptionUrl?: string;
+  /** Whether this provider appears in the subscription tab (subscription-based access). */
+  subscription?: boolean;
+  /** Whether this provider uses OAuth instead of API keys. */
+  oauth?: boolean;
+  /**
+   * Extra models not supported by OpenClaw.
+   * These are our own additions that won't appear in OpenClaw's models.json.
+   */
+  extraModels?: ModelConfig[];
+  /** Preferred default model ID for this provider. */
+  preferredModel?: string;
+}
 
-/**
- * Extra models for providers not supported by OpenClaw.
- * These are our own additions that won't appear in OpenClaw's models.json.
- */
 // CNY → USD conversion rate used for cost estimates below.
 export const CNY_USD = 7.0;
 const cny = (yuan: number) => Math.round((yuan / CNY_USD) * 100) / 100;
@@ -190,145 +77,334 @@ const FREE_COST: ModelCost = {
 };
 
 /**
- * Extra models for providers not supported by OpenClaw.
- * These are our own additions that won't appear in OpenClaw's models.json.
- *
- * Cost is in USD per million tokens, converted from CNY at ~7.3 CNY/USD.
+ * Unified provider registry. All provider metadata lives here.
+ * To add a new provider, add a single entry to this record.
  */
-export const EXTRA_MODELS: Partial<Record<LLMProvider, ModelConfig[]>> = {
-  volcengine: [
-    {
-      provider: "volcengine",
-      modelId: "doubao-seed-1-8-251228",
-      displayName: "Doubao Seed 1.8",
-      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
-      supportsVision: true,
-    },
-    {
-      provider: "volcengine",
-      modelId: "doubao-seed-1-6-251015",
-      displayName: "Doubao Seed 1.6",
-      cost: { input: cny(0.8), output: cny(8), cacheRead: 0, cacheWrite: 0 }, // ¥0.8/¥8
-      supportsVision: true,
-    },
-    {
-      provider: "volcengine",
-      modelId: "doubao-seed-1-6-lite-251015",
-      displayName: "Doubao Seed 1.6 Lite",
-      cost: { input: cny(0.4), output: cny(4), cacheRead: 0, cacheWrite: 0 }, // ¥0.4/¥4
-    },
-    {
-      provider: "volcengine",
-      modelId: "doubao-seed-1-6-flash-250828",
-      displayName: "Doubao Seed 1.6 Flash",
-      cost: { input: cny(0.2), output: cny(2), cacheRead: 0, cacheWrite: 0 }, // ¥0.2/¥2
-      supportsVision: true,
-    },
-  ],
-  zhipu: [
-    {
-      provider: "zhipu",
-      modelId: "glm-5",
-      displayName: "GLM-5",
-      cost: { input: cny(4), output: cny(18), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥18
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-5-code",
-      displayName: "GLM-5-Code",
-      cost: { input: cny(6), output: cny(28), cacheRead: 0, cacheWrite: 0 }, // ¥6/¥28
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.7-flash",
-      displayName: "GLM-4.7-Flash",
-      cost: FREE_COST,
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.7",
-      displayName: "GLM-4.7",
-      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.6",
-      displayName: "GLM-4.6",
-      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.6v",
-      displayName: "GLM-4.6V",
-      cost: { input: cny(2), output: cny(6), cacheRead: 0, cacheWrite: 0 }, // ¥2/¥6
-      supportsVision: true,
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.5",
-      displayName: "GLM-4.5",
-      cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥16
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.5-flash",
-      displayName: "GLM-4.5-Flash",
-      cost: FREE_COST,
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.5-air",
-      displayName: "GLM-4.5-Air",
-      cost: { input: cny(1), output: cny(8), cacheRead: 0, cacheWrite: 0 }, // ¥1/¥8
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4.5v",
-      displayName: "GLM-4.5V",
-      cost: { input: cny(4), output: cny(12), cacheRead: 0, cacheWrite: 0 }, // ¥4/¥12
-      supportsVision: true,
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4-plus",
-      displayName: "GLM-4 Plus",
-      cost: { input: cny(5), output: cny(5), cacheRead: 0, cacheWrite: 0 }, // ¥5/¥5
-    },
-    {
-      provider: "zhipu",
-      modelId: "glm-4-flash",
-      displayName: "GLM-4 Flash",
-      cost: FREE_COST,
-    },
-  ],
+export const PROVIDERS: Record<LLMProvider, ProviderMeta> = {
+  openai: {
+    label: "OpenAI",
+    baseUrl: "https://api.openai.com/v1",
+    url: "https://openai.com/api/pricing/",
+    apiKeyUrl: "https://platform.openai.com/api-keys",
+    envVar: "OPENAI_API_KEY",
+  },
+  anthropic: {
+    label: "Anthropic",
+    baseUrl: "https://api.anthropic.com/v1",
+    url: "https://www.anthropic.com/pricing",
+    apiKeyUrl: "https://console.anthropic.com/settings/keys",
+    envVar: "ANTHROPIC_API_KEY",
+    subscriptionUrl: "https://claude.ai/upgrade",
+    subscription: true,
+  },
+  google: {
+    label: "Google (Gemini)",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    url: "https://ai.google.dev/pricing",
+    apiKeyUrl: "https://aistudio.google.com/app/apikey",
+    envVar: "GEMINI_API_KEY",
+  },
+  deepseek: {
+    label: "DeepSeek",
+    baseUrl: "https://api.deepseek.com/v1",
+    url: "https://platform.deepseek.com/api-docs/pricing",
+    apiKeyUrl: "https://platform.deepseek.com/api_keys",
+    envVar: "DEEPSEEK_API_KEY",
+  },
+  zhipu: {
+    label: "Zhipu (GLM)",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    url: "https://open.bigmodel.cn/pricing",
+    apiKeyUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+    envVar: "ZHIPU_API_KEY",
+    extraModels: [
+      {
+        provider: "zhipu",
+        modelId: "glm-5",
+        displayName: "GLM-5",
+        cost: { input: cny(4), output: cny(18), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-5-code",
+        displayName: "GLM-5-Code",
+        cost: { input: cny(6), output: cny(28), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.7-flash",
+        displayName: "GLM-4.7-Flash",
+        cost: FREE_COST,
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.7",
+        displayName: "GLM-4.7",
+        cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.6",
+        displayName: "GLM-4.6",
+        cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.6v",
+        displayName: "GLM-4.6V",
+        cost: { input: cny(2), output: cny(6), cacheRead: 0, cacheWrite: 0 },
+        supportsVision: true,
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.5",
+        displayName: "GLM-4.5",
+        cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.5-flash",
+        displayName: "GLM-4.5-Flash",
+        cost: FREE_COST,
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.5-air",
+        displayName: "GLM-4.5-Air",
+        cost: { input: cny(1), output: cny(8), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4.5v",
+        displayName: "GLM-4.5V",
+        cost: { input: cny(4), output: cny(12), cacheRead: 0, cacheWrite: 0 },
+        supportsVision: true,
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4-plus",
+        displayName: "GLM-4 Plus",
+        cost: { input: cny(5), output: cny(5), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu",
+        modelId: "glm-4-flash",
+        displayName: "GLM-4 Flash",
+        cost: FREE_COST,
+      },
+    ],
+  },
+  "zhipu-coding": {
+    label: "Zhipu Coding Plan (GLM)",
+    baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+    url: "https://open.bigmodel.cn/pricing",
+    apiKeyUrl: "https://www.bigmodel.cn/glm-coding?ic=QWUW9KBBBL",
+    envVar: "ZHIPU_CODING_API_KEY",
+    subscriptionUrl: "https://www.bigmodel.cn/glm-coding?ic=QWUW9KBBBL",
+    subscription: true,
+    extraModels: [
+      {
+        provider: "zhipu-coding",
+        modelId: "glm-5",
+        displayName: "GLM-5",
+        cost: { input: cny(4), output: cny(18), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu-coding",
+        modelId: "glm-5-code",
+        displayName: "GLM-5-Code",
+        cost: { input: cny(6), output: cny(28), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu-coding",
+        modelId: "glm-4.7-flash",
+        displayName: "GLM-4.7-Flash",
+        cost: FREE_COST,
+      },
+      {
+        provider: "zhipu-coding",
+        modelId: "glm-4.7",
+        displayName: "GLM-4.7",
+        cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu-coding",
+        modelId: "glm-4.6",
+        displayName: "GLM-4.6",
+        cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "zhipu-coding",
+        modelId: "glm-4.6v",
+        displayName: "GLM-4.6V",
+        cost: { input: cny(2), output: cny(6), cacheRead: 0, cacheWrite: 0 },
+        supportsVision: true,
+      },
+    ],
+  },
+  zai: {
+    label: "Z.ai (GLM)",
+    baseUrl: "https://api.z.ai/api/paas/v4",
+    url: "https://docs.z.ai/guides/overview/pricing",
+    apiKeyUrl: "https://open.bigmodel.cn/usercenter/apikeys",
+    envVar: "ZAI_API_KEY",
+    subscriptionUrl: "https://www.bigmodel.cn/glm-coding?ic=QWUW9KBBBL",
+    preferredModel: "glm-4.7-flash",
+  },
+  moonshot: {
+    label: "Moonshot (Kimi)",
+    baseUrl: "https://api.moonshot.cn/v1",
+    url: "https://platform.moonshot.cn/docs/pricing/chat",
+    apiKeyUrl: "https://platform.moonshot.cn/console/api-keys",
+    envVar: "MOONSHOT_API_KEY",
+  },
+  qwen: {
+    label: "Qwen",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    url: "https://help.aliyun.com/zh/model-studio/getting-started/models",
+    apiKeyUrl: "https://bailian.console.aliyun.com/#/model-market/api-key",
+    envVar: "DASHSCOPE_API_KEY",
+  },
+  groq: {
+    label: "Groq",
+    baseUrl: "https://api.groq.com/openai/v1",
+    url: "https://groq.com/pricing/",
+    apiKeyUrl: "https://console.groq.com/keys",
+    envVar: "GROQ_API_KEY",
+  },
+  mistral: {
+    label: "Mistral",
+    baseUrl: "https://api.mistral.ai/v1",
+    url: "https://mistral.ai/pricing",
+    apiKeyUrl: "https://console.mistral.ai/api-keys",
+    envVar: "MISTRAL_API_KEY",
+  },
+  xai: {
+    label: "xAI (Grok)",
+    baseUrl: "https://api.x.ai/v1",
+    url: "https://docs.x.ai/docs/models#models-and-pricing",
+    apiKeyUrl: "https://console.x.ai/team/default/api-keys",
+    envVar: "XAI_API_KEY",
+  },
+  openrouter: {
+    label: "OpenRouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    url: "https://openrouter.ai/models",
+    apiKeyUrl: "https://openrouter.ai/settings/keys",
+    envVar: "OPENROUTER_API_KEY",
+  },
+  minimax: {
+    label: "MiniMax",
+    baseUrl: "https://api.minimax.chat/v1",
+    url: "https://platform.minimaxi.com/document/Price",
+    apiKeyUrl: "https://platform.minimaxi.com/user-center/basic-information/interface-key",
+    envVar: "MINIMAX_API_KEY",
+  },
+  venice: {
+    label: "Venice AI",
+    baseUrl: "https://api.venice.ai/api/v1",
+    url: "https://venice.ai/pricing",
+    apiKeyUrl: "https://venice.ai/settings/api",
+    envVar: "VENICE_API_KEY",
+  },
+  xiaomi: {
+    label: "Xiaomi",
+    baseUrl: "https://api.xiaomi.com/v1",
+    url: "https://mimo.xiaomi.com/",
+    apiKeyUrl: "https://mimo.xiaomi.com/",
+    envVar: "XIAOMI_API_KEY",
+  },
+  volcengine: {
+    label: "Volcengine (Doubao)",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    url: "https://www.volcengine.com/pricing?product=ark_bd&tab=1",
+    apiKeyUrl: "https://console.volcengine.com/ark/region:ark+cn-beijing/apiKey",
+    envVar: "ARK_API_KEY",
+    extraModels: [
+      {
+        provider: "volcengine",
+        modelId: "doubao-seed-1-8-251228",
+        displayName: "Doubao Seed 1.8",
+        cost: { input: cny(4), output: cny(16), cacheRead: 0, cacheWrite: 0 },
+        supportsVision: true,
+      },
+      {
+        provider: "volcengine",
+        modelId: "doubao-seed-1-6-251015",
+        displayName: "Doubao Seed 1.6",
+        cost: { input: cny(0.8), output: cny(8), cacheRead: 0, cacheWrite: 0 },
+        supportsVision: true,
+      },
+      {
+        provider: "volcengine",
+        modelId: "doubao-seed-1-6-lite-251015",
+        displayName: "Doubao Seed 1.6 Lite",
+        cost: { input: cny(0.4), output: cny(4), cacheRead: 0, cacheWrite: 0 },
+      },
+      {
+        provider: "volcengine",
+        modelId: "doubao-seed-1-6-flash-250828",
+        displayName: "Doubao Seed 1.6 Flash",
+        cost: { input: cny(0.2), output: cny(2), cacheRead: 0, cacheWrite: 0 },
+        supportsVision: true,
+      },
+    ],
+  },
+  "amazon-bedrock": {
+    label: "Amazon Bedrock",
+    baseUrl: "https://bedrock-runtime.us-east-1.amazonaws.com",
+    url: "https://aws.amazon.com/bedrock/pricing/",
+    apiKeyUrl: "https://console.aws.amazon.com/iam/home#/security_credentials",
+    envVar: "AWS_ACCESS_KEY_ID",
+  },
+  "google-gemini-cli": {
+    label: "Google Gemini (Subscription)",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    url: "https://gemini.google/subscriptions/",
+    apiKeyUrl: "https://gemini.google/subscriptions/",
+    envVar: "GOOGLE_GEMINI_CLI_API_KEY",
+    subscriptionUrl: "https://gemini.google/subscriptions/",
+    subscription: true,
+    oauth: true,
+  },
 };
 
+/** Ordered list of all providers. */
+export const ALL_PROVIDERS: LLMProvider[] = Object.keys(
+  PROVIDERS,
+) as LLMProvider[];
+
+/** Known regions. */
+export type Region = "us" | "eu" | "cn" | (string & {});
+
 /**
- * Preferred default model per provider. If a provider has a preferred model
- * and that model exists in KNOWN_MODELS, `getDefaultModelForProvider` returns
- * it instead of the first entry. This lets us set defaults for vendor-managed
- * providers (e.g. zai) without overriding their full model list.
+ * Maps each provider to the settings key used to store its API key.
+ * e.g. "openai" -> "openai-api-key"
  */
-const PREFERRED_DEFAULT_MODEL: Partial<Record<LLMProvider, string>> = {
-  zai: "glm-4.7-flash",
-};
+export function providerSecretKey(provider: LLMProvider): string {
+  return `${provider}-api-key`;
+}
 
 /**
  * All known models grouped by provider.
  *
- * At startup this only contains EXTRA_MODELS. Once the gateway's models.json
- * is loaded, `initKnownModels()` populates it with OpenClaw's full catalog.
+ * At startup this only contains extraModels from PROVIDERS. Once the gateway's
+ * models.json is loaded, `initKnownModels()` populates it with OpenClaw's
+ * full catalog.
  */
 // eslint-disable-next-line import/no-mutable-exports
-export let KNOWN_MODELS: Partial<Record<LLMProvider, ModelConfig[]>> = {
-  ...EXTRA_MODELS,
-};
+export let KNOWN_MODELS: Partial<Record<LLMProvider, ModelConfig[]>> =
+  Object.fromEntries(
+    ALL_PROVIDERS
+      .filter((p) => PROVIDERS[p].extraModels)
+      .map((p) => [p, PROVIDERS[p].extraModels!]),
+  );
 
 /**
  * Populate KNOWN_MODELS from the gateway's model catalog.
  *
  * Called by `readFullModelCatalog()` in @easyclaw/gateway after reading
- * models.json. EXTRA_MODELS providers take precedence (our own config).
+ * models.json. extraModels providers take precedence (our own config).
  */
 export function initKnownModels(
   catalog: Record<string, Array<{ id: string; name: string }>>,
@@ -345,10 +421,11 @@ export function initKnownModels(
     }));
   }
 
-  // EXTRA_MODELS take precedence
-  for (const [provider, models] of Object.entries(EXTRA_MODELS)) {
-    if (models && models.length > 0) {
-      result[provider as LLMProvider] = models;
+  // extraModels take precedence
+  for (const p of ALL_PROVIDERS) {
+    const extra = PROVIDERS[p].extraModels;
+    if (extra && extra.length > 0) {
+      result[p] = extra;
     }
   }
 
@@ -390,7 +467,7 @@ export function getDefaultModelForProvider(
 ): ModelConfig | undefined {
   const models = KNOWN_MODELS[provider];
   if (!models || models.length === 0) return undefined;
-  const preferred = PREFERRED_DEFAULT_MODEL[provider];
+  const preferred = PROVIDERS[provider].preferredModel;
   if (preferred) {
     const match = models.find((m) => m.modelId === preferred);
     if (match) return match;
@@ -442,6 +519,7 @@ export function getProvidersForRegion(region: string): LLMProvider[] {
     return [
       "deepseek",
       "zhipu",
+      "zhipu-coding",
       "moonshot",
       "qwen",
       "volcengine",

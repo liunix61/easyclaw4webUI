@@ -42,6 +42,10 @@ function cleanMessageText(text: string): string {
   // using OpenClaw's battle-tested implementation that respects code blocks
   cleaned = stripReasoningTagsFromText(cleaned, { mode: "preserve", trim: "start" });
 
+  // Strip "NO_REPLY" directive — the agent outputs this after using the message tool
+  // to indicate it already sent the reply via the outbound system.
+  cleaned = cleaned.replace(/\bNO_REPLY\b/g, "").trim();
+
   // Detect audio transcript pattern:
   //   [Audio] User text: [Telegram ... ] <media:audio>\nTranscript: 实际文本
   const audioMatch = cleaned.match(/\[Audio\]\s*User text:\s*\[.*?\]\s*<media:audio>\s*Transcript:\s*([\s\S]*)/);
@@ -70,18 +74,35 @@ function formatMessage(text: string): React.ReactNode[] {
       const code = nlIdx >= 0 ? inner.slice(nlIdx + 1) : inner;
       parts.push(<pre key={i}><code>{code}</code></pre>);
     } else {
-      // Inline formatting: `code` and newlines
+      // Inline formatting: `code`, markdown images, and newlines
       const inlineParts = seg.split(/(`[^`]+`)/g);
       for (let j = 0; j < inlineParts.length; j++) {
         const ip = inlineParts[j];
         if (ip.startsWith("`") && ip.endsWith("`")) {
           parts.push(<code key={`${i}-${j}`}>{ip.slice(1, -1)}</code>);
         } else {
-          // Convert newlines to <br>
-          const lines = ip.split("\n");
-          for (let k = 0; k < lines.length; k++) {
-            if (k > 0) parts.push(<br key={`${i}-${j}-br${k}`} />);
-            if (lines[k]) parts.push(lines[k]);
+          // Split on markdown images: ![alt](url)
+          const imgParts = ip.split(/(!\[[^\]]*\]\([^)]+\))/g);
+          for (let m = 0; m < imgParts.length; m++) {
+            const mp = imgParts[m];
+            const imgMatch = mp.match(/^!\[([^\]]*)\]\(([^)]+)\)$/);
+            if (imgMatch) {
+              parts.push(
+                <img
+                  key={`${i}-${j}-img${m}`}
+                  src={imgMatch[2]}
+                  alt={imgMatch[1]}
+                  className="chat-bubble-img"
+                />,
+              );
+            } else {
+              // Convert newlines to <br>
+              const lines = mp.split("\n");
+              for (let k = 0; k < lines.length; k++) {
+                if (k > 0) parts.push(<br key={`${i}-${j}-${m}-br${k}`} />);
+                if (lines[k]) parts.push(lines[k]);
+              }
+            }
           }
         }
       }
@@ -549,10 +570,12 @@ export function ChatPage({ onAgentNameChange }: { onAgentNameChange?: (name: str
       textareaRef.current.style.height = "auto";
     }
 
-    // Build RPC params
+    // Build RPC params.
+    // When sending images without text, provide a placeholder so the agent
+    // pipeline doesn't reject the request for missing text body.
     const params: Record<string, unknown> = {
       sessionKey: sessionKeyRef.current,
-      message: text,
+      message: text || (images.length > 0 ? t("chat.imageOnlyPlaceholder") : ""),
       idempotencyKey,
     };
     if (images.length > 0) {

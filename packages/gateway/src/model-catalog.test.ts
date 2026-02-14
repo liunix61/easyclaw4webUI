@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { CatalogModelEntry } from "./model-catalog.js";
-import { EXTRA_MODELS } from "@easyclaw/core";
+import { PROVIDERS, ALL_PROVIDERS } from "@easyclaw/core";
 
 // vi.hoisted runs before vi.mock hoisting, so mocks are available in the factory
 const mocks = vi.hoisted(() => ({
@@ -39,6 +39,18 @@ describe("normalizeCatalog", () => {
     expect(result.zai!.length).toBe(2);
     expect(result.zhipu).toBeDefined();
     expect(result.zhipu!.length).toBe(1);
+  });
+
+  it("should keep 'zhipu' and 'zhipu-coding' as separate providers", () => {
+    const catalog = {
+      zhipu: [entry("glm-5", "GLM-5")],
+      "zhipu-coding": [entry("glm-5", "GLM-5"), entry("glm-4.7", "GLM 4.7")],
+    };
+    const result = normalizeCatalog(catalog);
+    expect(result.zhipu).toBeDefined();
+    expect(result.zhipu!.length).toBe(1);
+    expect(result["zhipu-coding"]).toBeDefined();
+    expect(result["zhipu-coding"]!.length).toBe(2);
   });
 
   it("should sort models in reverse alphabetical order by ID", () => {
@@ -141,8 +153,9 @@ describe("readFullModelCatalog", () => {
     mocks.existsSync.mockReturnValue(false);
     const result = await readFullModelCatalog({ EASYCLAW_STATE_DIR: "/tmp/fake" });
 
-    // Should contain EXTRA_MODELS providers (volcengine)
-    for (const provider of Object.keys(EXTRA_MODELS)) {
+    // Should contain extraModels providers (volcengine, zhipu, zhipu-coding)
+    for (const provider of ALL_PROVIDERS) {
+      if (!PROVIDERS[provider].extraModels) continue;
       expect(result[provider]).toBeDefined();
       expect(result[provider]!.length).toBeGreaterThan(0);
     }

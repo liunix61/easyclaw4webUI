@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveOpenClawStateDir } from "./config-writer.js";
 import { resolveVendorDir } from "./vendor.js";
-import { EXTRA_MODELS, initKnownModels } from "@easyclaw/core";
+import { PROVIDERS, ALL_PROVIDERS, initKnownModels } from "@easyclaw/core";
 
 /** A minimal model entry for the UI (no secrets, no cost data). */
 export interface CatalogModelEntry {
@@ -198,8 +198,9 @@ export async function readFullModelCatalog(
   // Gateway entries override vendor entries per provider
   const merged = { ...vendor, ...gateway };
 
-  // Add EXTRA_MODELS providers that are missing from both vendor and gateway
-  for (const [p, models] of Object.entries(EXTRA_MODELS)) {
+  // Add extraModels providers that are missing from both vendor and gateway
+  for (const p of ALL_PROVIDERS) {
+    const models = PROVIDERS[p].extraModels;
     if (!merged[p] && models) {
       merged[p] = models.map((m) => ({ id: m.modelId, name: m.displayName }));
     }

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createLogger } from "@easyclaw/logger";
-import { EXTRA_MODELS, PROVIDER_BASE_URLS, type LLMProvider } from "@easyclaw/core";
+import { PROVIDERS, ALL_PROVIDERS, type LLMProvider } from "@easyclaw/core";
 import { generateAudioConfig, mergeAudioConfig } from "./audio-config-writer.js";
 
 const log = createLogger("gateway:config");
@@ -84,13 +84,13 @@ export function buildExtraProviderConfigs(): Record<string, {
     }>;
   }> = {};
 
-  for (const [provider, models] of Object.entries(EXTRA_MODELS)) {
+  for (const provider of ALL_PROVIDERS) {
+    const meta = PROVIDERS[provider];
+    const models = meta.extraModels;
     if (!models || models.length === 0) continue;
-    const baseUrl = PROVIDER_BASE_URLS[provider as LLMProvider];
-    if (!baseUrl) continue;
 
     result[provider] = {
-      baseUrl,
+      baseUrl: meta.baseUrl,
       api: "openai-completions",
       models: models.map((m) => ({
         id: m.modelId,

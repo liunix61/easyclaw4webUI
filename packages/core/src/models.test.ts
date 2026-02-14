@@ -6,21 +6,22 @@ import {
   getProvidersForRegion,
   getModelsForProvider,
   KNOWN_MODELS,
-  EXTRA_MODELS,
+  PROVIDERS,
   ALL_PROVIDERS,
-  PROVIDER_LABELS,
   initKnownModels,
 } from "./models.js";
 
-describe("EXTRA_MODELS", () => {
+describe("PROVIDERS extraModels", () => {
   it("should have volcengine models", () => {
-    expect(EXTRA_MODELS.volcengine).toBeDefined();
-    expect(EXTRA_MODELS.volcengine!.length).toBeGreaterThan(0);
+    expect(PROVIDERS.volcengine.extraModels).toBeDefined();
+    expect(PROVIDERS.volcengine.extraModels!.length).toBeGreaterThan(0);
   });
 
-  it("should have valid model configs", () => {
-    for (const [provider, models] of Object.entries(EXTRA_MODELS)) {
-      for (const model of models!) {
+  it("should have valid model configs for all extraModels", () => {
+    for (const provider of ALL_PROVIDERS) {
+      const models = PROVIDERS[provider].extraModels;
+      if (!models) continue;
+      for (const model of models) {
         expect(model.provider).toBe(provider);
         expect(model.modelId).toBeTruthy();
         expect(model.displayName).toBeTruthy();
@@ -30,10 +31,11 @@ describe("EXTRA_MODELS", () => {
 });
 
 describe("KNOWN_MODELS (before initKnownModels)", () => {
-  it("should initially contain only EXTRA_MODELS providers", () => {
-    // Before initKnownModels is called, KNOWN_MODELS only has EXTRA_MODELS
-    for (const provider of Object.keys(EXTRA_MODELS)) {
-      expect(KNOWN_MODELS[provider as keyof typeof KNOWN_MODELS]).toBeDefined();
+  it("should initially contain only extraModels providers", () => {
+    // Before initKnownModels is called, KNOWN_MODELS only has providers with extraModels
+    for (const provider of ALL_PROVIDERS) {
+      if (!PROVIDERS[provider].extraModels) continue;
+      expect(KNOWN_MODELS[provider]).toBeDefined();
     }
   });
 
@@ -72,7 +74,7 @@ describe("initKnownModels", () => {
     expect(KNOWN_MODELS.deepseek).toHaveLength(1);
   });
 
-  it("should keep EXTRA_MODELS providers over catalog", () => {
+  it("should keep extraModels providers over catalog", () => {
     const catalog = {
       volcengine: [
         { id: "some-other-model", name: "Other Model" },
@@ -81,8 +83,8 @@ describe("initKnownModels", () => {
 
     initKnownModels(catalog);
 
-    // EXTRA_MODELS take precedence — volcengine should still have our models
-    expect(KNOWN_MODELS.volcengine).toEqual(EXTRA_MODELS.volcengine);
+    // extraModels take precedence — volcengine should still have our models
+    expect(KNOWN_MODELS.volcengine).toEqual(PROVIDERS.volcengine.extraModels);
   });
 
   it("should ignore unknown providers", () => {
@@ -98,10 +100,10 @@ describe("initKnownModels", () => {
   });
 });
 
-describe("ALL_PROVIDERS / PROVIDER_LABELS", () => {
+describe("ALL_PROVIDERS / PROVIDERS", () => {
   it("should have labels for all providers", () => {
     for (const p of ALL_PROVIDERS) {
-      expect(PROVIDER_LABELS[p]).toBeTruthy();
+      expect(PROVIDERS[p].label).toBeTruthy();
     }
   });
 
@@ -160,20 +162,20 @@ describe("getDefaultModelForProvider", () => {
     expect(model!.modelId).toBe("deepseek-chat");
   });
 
-  it("should return EXTRA_MODELS data for volcengine", () => {
+  it("should return extraModels data for volcengine", () => {
     const model = getDefaultModelForProvider("volcengine");
     expect(model).toBeDefined();
     expect(model!.provider).toBe("volcengine");
-    expect(model!.modelId).toBe(EXTRA_MODELS.volcengine![0].modelId);
+    expect(model!.modelId).toBe(PROVIDERS.volcengine.extraModels![0].modelId);
   });
 
   it("should return undefined for providers with no models", () => {
-    initKnownModels({}); // empty catalog — only EXTRA_MODELS
+    initKnownModels({}); // empty catalog — only extraModels
 
     for (const provider of ALL_PROVIDERS) {
       const model = getDefaultModelForProvider(provider);
-      if (EXTRA_MODELS[provider]) {
-        // EXTRA_MODELS providers should return real model data
+      if (PROVIDERS[provider].extraModels) {
+        // extraModels providers should return real model data
         expect(model).toBeDefined();
         expect(model!.modelId).not.toBe(provider);
       } else {
@@ -200,9 +202,9 @@ describe("getModelsForProvider", () => {
     expect(models[0].modelId).toBe("gpt-4o");
   });
 
-  it("should return EXTRA_MODELS for volcengine", () => {
+  it("should return extraModels for volcengine", () => {
     const models = getModelsForProvider("volcengine");
-    expect(models).toEqual(EXTRA_MODELS.volcengine);
+    expect(models).toEqual(PROVIDERS.volcengine.extraModels);
   });
 
   it("should return empty array for providers with no models", () => {
@@ -213,12 +215,13 @@ describe("getModelsForProvider", () => {
     expect(models).toEqual([]);
   });
 
-  it("should return EXTRA_MODELS even with empty catalog", () => {
+  it("should return extraModels even with empty catalog", () => {
     initKnownModels({}); // empty catalog
 
-    for (const [provider, expectedModels] of Object.entries(EXTRA_MODELS)) {
+    for (const provider of ALL_PROVIDERS) {
+      const expectedModels = PROVIDERS[provider].extraModels;
       if (!expectedModels) continue;
-      const models = getModelsForProvider(provider as any);
+      const models = getModelsForProvider(provider);
       expect(models.length).toBe(expectedModels.length);
       for (const model of models) {
         expect(model.modelId).not.toBe(provider);

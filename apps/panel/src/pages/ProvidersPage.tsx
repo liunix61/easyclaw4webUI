@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { PROVIDER_API_KEY_URLS, PROVIDER_SUBSCRIPTION_URLS, getDefaultModelForProvider } from "@easyclaw/core";
+import { ALL_PROVIDERS, PROVIDERS, getDefaultModelForProvider } from "@easyclaw/core";
 import type { LLMProvider } from "@easyclaw/core";
 import {
   fetchSettings,
@@ -18,14 +18,18 @@ import {
 import type { ProviderKeyEntry, ProviderPricing } from "../api.js";
 import { ModelSelect } from "../components/ModelSelect.js";
 import { ProviderSelect } from "../components/ProviderSelect.js";
-import { PricingTable } from "../components/PricingTable.js";
+import { PricingTable, SubscriptionPricingTable } from "../components/PricingTable.js";
 
+
+/** Providers that support subscription mode (derived from PROVIDERS.subscription). */
+const SUBSCRIPTION_PROVIDERS = ALL_PROVIDERS.filter((p) => PROVIDERS[p].subscription);
 
 export function ProvidersPage() {
   const { t, i18n } = useTranslation();
   const [keys, setKeys] = useState<ProviderKeyEntry[]>([]);
   const [defaultProvider, setDefaultProvider] = useState<string>("");
-  const defaultProv = i18n.language === "zh" ? "zhipu" : "openai";
+  const [tab, setTab] = useState<"subscription" | "api">("subscription");
+  const defaultProv = i18n.language === "zh" ? "zhipu-coding" : "google-gemini-cli";
   const [newProvider, setNewProvider] = useState(defaultProv);
   const [expandedKeyId, setExpandedKeyId] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState("");
@@ -291,6 +295,18 @@ export function ProvidersPage() {
     setOauthTokenPreview("");
   }
 
+  function handleTabChange(newTab: "subscription" | "api") {
+    setTab(newTab);
+    const prov = newTab === "subscription"
+      ? (i18n.language === "zh" ? "zhipu-coding" : "google-gemini-cli")
+      : (i18n.language === "zh" ? "zhipu" : "openai");
+    handleNewProviderChange(prov);
+  }
+
+  const providerFilter = tab === "subscription"
+    ? SUBSCRIPTION_PROVIDERS
+    : ALL_PROVIDERS.filter((p) => !PROVIDERS[p].subscription);
+
   return (
     <div>
       <h1>{t("providers.title")}</h1>
@@ -304,28 +320,56 @@ export function ProvidersPage() {
       <div className="page-two-col">
       <div ref={leftCardRef} className="section-card page-col-main">
         <h3>{t("providers.addTitle")}</h3>
+        <div className="tab-bar">
+          <button
+            className={`tab-btn${tab === "subscription" ? " tab-btn-active" : ""}`}
+            onClick={() => handleTabChange("subscription")}
+          >
+            {t("providers.tabSubscription")}
+          </button>
+          <button
+            className={`tab-btn${tab === "api" ? " tab-btn-active" : ""}`}
+            onClick={() => handleTabChange("api")}
+          >
+            {t("providers.tabApi")}
+          </button>
+        </div>
         <div className="mb-sm">
           <div className="form-label text-secondary">{t("onboarding.providerLabel")}</div>
-          <ProviderSelect value={newProvider} onChange={handleNewProviderChange} />
-          {newProvider !== "google-gemini-cli" && (
-          <div className="form-help-sm provider-links">
-            <a
-              href={PROVIDER_API_KEY_URLS[newProvider as LLMProvider]}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {t("providers.getApiKey")} &rarr;
-            </a>
-            {PROVIDER_SUBSCRIPTION_URLS[newProvider as LLMProvider] && (
+          <ProviderSelect value={newProvider} onChange={handleNewProviderChange} providers={providerFilter} />
+          {tab === "subscription" ? (
+            PROVIDERS[newProvider as LLMProvider]?.subscriptionUrl && (
+            <div className="form-help-sm provider-links">
               <a
-                href={PROVIDER_SUBSCRIPTION_URLS[newProvider as LLMProvider]}
+                href={PROVIDERS[newProvider as LLMProvider]?.subscriptionUrl}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {t("providers.subscribeForValue")} &rarr;
+                {t("providers.getSubscription")} &rarr;
               </a>
-            )}
-          </div>
+            </div>
+            )
+          ) : (
+            newProvider !== "google-gemini-cli" && (
+            <div className="form-help-sm provider-links">
+              <a
+                href={PROVIDERS[newProvider as LLMProvider]?.apiKeyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {t("providers.getApiKey")} &rarr;
+              </a>
+              {PROVIDERS[newProvider as LLMProvider]?.subscriptionUrl && (
+                <a
+                  href={PROVIDERS[newProvider as LLMProvider]?.subscriptionUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {t("providers.subscribeForValue")} &rarr;
+                </a>
+              )}
+            </div>
+            )
           )}
         </div>
 
@@ -421,7 +465,7 @@ export function ProvidersPage() {
           </>
         ) : (
         <>
-        {newProvider === "anthropic" && (
+        {newProvider === "anthropic" && tab === "subscription" && (
           <div className="info-box info-box-yellow">
             {t("providers.anthropicTokenWarning")}
           </div>
@@ -450,7 +494,7 @@ export function ProvidersPage() {
 
         <div className="mb-sm">
           <div className="form-label text-secondary">
-            {newProvider === "anthropic" ? t("providers.anthropicTokenLabel") : t("providers.apiKeyLabel")} <span className="required">*</span>
+            {newProvider === "anthropic" && tab === "subscription" ? t("providers.anthropicTokenLabel") : t("providers.apiKeyLabel")} <span className="required">*</span>
           </div>
           <input
             type="password"
@@ -458,7 +502,7 @@ export function ProvidersPage() {
             data-1p-ignore
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder={newProvider === "anthropic" ? t("providers.anthropicTokenPlaceholder") : t("providers.apiKeyPlaceholder")}
+            placeholder={newProvider === "anthropic" && tab === "subscription" ? t("providers.anthropicTokenPlaceholder") : t("providers.apiKeyPlaceholder")}
             className="input-full input-mono"
           />
           <small className="form-help-sm">
@@ -506,7 +550,11 @@ export function ProvidersPage() {
 
       {/* Right: Pricing table */}
       <div className="page-col-side" style={{ height: leftHeight }}>
-        <PricingTable provider={newProvider} pricingList={pricingList} loading={pricingLoading} />
+        {tab === "subscription" ? (
+          <SubscriptionPricingTable provider={newProvider} pricingList={pricingList} loading={pricingLoading} />
+        ) : (
+          <PricingTable provider={newProvider} pricingList={pricingList} loading={pricingLoading} />
+        )}
       </div>
       </div>
 

@@ -16,17 +16,11 @@ export { easyClawConfigSchema, DEFAULT_STT_SETTINGS, STT_SETTINGS_KEYS, STT_SECR
 export type { ChannelType } from "./channels.js";
 export { ALL_CHANNELS, BUILTIN_CHANNELS, CUSTOM_CHANNELS } from "./channels.js";
 
-export type { LLMProvider, ModelConfig, Region } from "./models.js";
+export type { LLMProvider, ModelConfig, Region, ProviderMeta } from "./models.js";
 export {
+  PROVIDERS,
   KNOWN_MODELS,
-  EXTRA_MODELS,
   initKnownModels,
-  PROVIDER_LABELS,
-  PROVIDER_URLS,
-  PROVIDER_API_KEY_URLS,
-  PROVIDER_SUBSCRIPTION_URLS,
-  PROVIDER_BASE_URLS,
-  PROVIDER_ENV_VARS,
   ALL_PROVIDERS,
   CNY_USD,
   providerSecretKey,

@@ -198,9 +198,7 @@ async function writeProxyRouterConfig(
   };
 
   // For each provider, find active key and its proxy
-  // Include both standard providers AND google-gemini-cli (OAuth-based, not in ALL_PROVIDERS)
-  const providers: string[] = [...ALL_PROVIDERS, "google-gemini-cli"];
-  for (const provider of providers) {
+  for (const provider of ALL_PROVIDERS) {
     const defaultKey = storage.providerKeys.getDefault(provider);
     if (defaultKey) {
       config.activeKeys[provider] = defaultKey.id;
