@@ -105,6 +105,14 @@ export class GatewayLauncher extends EventEmitter<GatewayEvents> {
       return;
     }
 
+    // Windows doesn't support SIGUSR1 — fall back to stop+start
+    if (process.platform === "win32") {
+      log.info("Windows detected, falling back to stop+start for reload");
+      await this.stop();
+      await this.start();
+      return;
+    }
+
     log.info(`Sending SIGUSR1 to gateway (PID ${this.process.pid}) for graceful reload`);
     this.process.kill("SIGUSR1");
   }

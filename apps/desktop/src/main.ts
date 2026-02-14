@@ -1039,9 +1039,9 @@ app.whenReady().then(async () => {
       }
       const creds = pendingOAuthCreds;
 
-      // Validate access token through the proxy router (system proxy + per-key proxy chain)
-      const proxyRouterUrl = `http://127.0.0.1:${PROXY_ROUTER_PORT}`;
-      const validation = await validateGeminiAccessToken(creds.credentials.access, proxyRouterUrl, creds.credentials.projectId);
+      // Priority: per-key proxy > proxy router (system proxy) > direct
+      const validationProxy = options.proxyUrl?.trim() || `http://127.0.0.1:${PROXY_ROUTER_PORT}`;
+      const validation = await validateGeminiAccessToken(creds.credentials.access, validationProxy, creds.credentials.projectId);
       if (!validation.valid) {
         throw new Error(validation.error || "Token validation failed");
       }

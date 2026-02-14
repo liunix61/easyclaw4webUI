@@ -268,10 +268,12 @@ async function installViaNpm(
   onProgress?.("Installing Gemini CLI via npm...");
 
   return new Promise<boolean>((resolve) => {
+    // On Windows, npm is a .cmd file that requires shell execution.
+    const useShell = process.platform === "win32";
     const child = execFile(
       npmBin,
       ["install", "--prefix", LOCAL_GEMINI_DIR, "@google/gemini-cli"],
-      { timeout: 120_000, env: { ...process.env, NODE_ENV: "", PATH: enrichedPath() } },
+      { timeout: 120_000, shell: useShell, env: { ...process.env, NODE_ENV: "", PATH: enrichedPath() } },
       (err) => {
         if (err) {
           onProgress?.(`npm install failed: ${err.message}`);
@@ -360,8 +362,12 @@ export async function installGeminiCliLocal(
 
   // Try npm first (installs full package with all dependencies)
   if (findInPath("npm")) {
-    const ok = await installViaNpm(onProgress);
-    if (ok) return true;
+    try {
+      const ok = await installViaNpm(onProgress);
+      if (ok) return true;
+    } catch (err) {
+      onProgress?.(`npm install error: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   // Fallback: download just gemini-cli-core directly (no npm needed)

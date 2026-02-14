@@ -130,6 +130,9 @@ let wecomGatewayRpc: GatewayRpcClient | null = null;
 // STT manager reference for voice transcription (set during startPanelServer)
 let wecomSttManager: { transcribe(audio: Buffer, format: string): Promise<string | null>; isEnabled(): boolean } | null = null;
 
+// Storage reference for WeCom relay handlers (set during startPanelServer)
+let wecomStorageRef: Storage | null = null;
+
 // Cached connection params for reconnects
 let wecomConnParams: {
   relayUrl: string;
@@ -221,7 +224,7 @@ function doConnectWeComRelay(): void {
         if (wecomRelayState) {
           wecomRelayState.externalUserId = frame.external_user_id;
         }
-        storage.settings.set("wecom-external-user-id", frame.external_user_id);
+        wecomStorageRef?.settings.set("wecom-external-user-id", frame.external_user_id);
         return;
       }
 
@@ -328,7 +331,7 @@ async function handleWeComInbound(frame: {
   try {
     await wecomGatewayRpc.request("agent", {
       sessionKey,
-      channel: "wechat",
+      channel: "webchat",
       message,
       idempotencyKey: frame.id,
     });
@@ -975,13 +978,11 @@ async function validateProviderApiKey(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
-  // Set up proxy if provided (to prevent IP pollution/bans)
-  let dispatcher: import("undici").Dispatcher | undefined;
-  if (proxyUrl) {
-    const { ProxyAgent } = await import("undici");
-    dispatcher = new ProxyAgent(proxyUrl);
-    log.info(`Using proxy for validation: ${proxyUrl.replace(/\/\/[^:]+:[^@]+@/, '//*****:*****@')}`);
-  }
+  // Priority: per-key proxy > proxy router (system proxy) > direct
+  // Per-key proxy is typically outside GFW and can reach the API directly.
+  // If no per-key proxy, fall back to proxy router which handles system proxy / direct.
+  const { ProxyAgent } = await import("undici");
+  const dispatcher = new ProxyAgent(proxyUrl || "http://127.0.0.1:9999");
 
   try {
     let res: Response;
@@ -1111,7 +1112,8 @@ export function startPanelServer(options: PanelServerOptions): Server {
   const distDir = resolve(options.panelDistDir);
   const { storage, secretStore, getRpcClient, onRuleChange, onProviderChange, onOpenFileDialog, sttManager, onSttChange, onPermissionsChange, onChannelConfigured, onOAuthFlow, onOAuthAcquire, onOAuthSave, onTelemetryTrack, vendorDir, deviceId, getUpdateResult, getGatewayInfo, changelogPath } = options;
 
-  // Store STT manager reference so WeCom voice handler can use it
+  // Store references so module-level WeCom handlers can access them
+  wecomStorageRef = storage;
   if (sttManager) {
     wecomSttManager = sttManager;
   }
@@ -1381,7 +1383,7 @@ async function handleApiRoute(
       sendJson(res, 400, { valid: false, error: "Missing provider or apiKey" });
       return;
     }
-    const result = await validateProviderApiKey(body.provider, body.apiKey, body.proxyUrl);
+    const result = await validateProviderApiKey(body.provider, body.apiKey, body.proxyUrl || undefined);
     sendJson(res, 200, result);
     return;
   }
@@ -1616,7 +1618,7 @@ async function handleApiRoute(
     }
 
     // Validate key before saving
-    const validation = await validateProviderApiKey(body.provider, body.apiKey);
+    const validation = await validateProviderApiKey(body.provider, body.apiKey, body.proxyUrl || undefined);
     if (!validation.valid) {
       sendJson(res, 422, { error: validation.error || "Invalid API key" });
       return;

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { PROVIDER_API_KEY_URLS, PROVIDER_SUBSCRIPTION_URLS, getDefaultModelForProvider } from "@easyclaw/core";
 import type { LLMProvider } from "@easyclaw/core";
-import { updateSettings, createProviderKey, validateApiKey, fetchPricing, trackEvent } from "../api.js";
+import { updateSettings, createProviderKey, validateApiKey, fetchPricing, trackEvent, startOAuthFlow, saveOAuthFlow } from "../api.js";
 import type { ProviderPricing } from "../api.js";
 import { ProviderSelect } from "../components/ProviderSelect.js";
 import { ModelSelect } from "../components/ModelSelect.js";
@@ -45,6 +45,9 @@ export function OnboardingPage({
   const [providerError, setProviderError] = useState<{ key: string; detail?: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthTokenPreview, setOauthTokenPreview] = useState("");
+  const [label, setLabel] = useState("");
   const [pricingList, setPricingList] = useState<ProviderPricing[] | null>(null);
   const [pricingLoading, setPricingLoading] = useState(true);
   const formRef = useRef<HTMLDivElement>(null);
@@ -89,9 +92,49 @@ export function OnboardingPage({
     { name: t("onboarding.sectionUsage"), desc: t("onboarding.sectionUsageDesc") },
   ];
 
+  const isOAuthProvider = provider === "google-gemini-cli";
+
   function handleProviderChange(newProvider: string) {
     setProvider(newProvider);
     setModel(getDefaultModelForProvider(newProvider as LLMProvider)?.modelId ?? "");
+    setOauthTokenPreview("");
+    setLabel("");
+  }
+
+  async function handleGeminiOAuth() {
+    setOauthLoading(true);
+    setProviderError(null);
+    try {
+      const result = await startOAuthFlow("google-gemini-cli");
+      setOauthTokenPreview(result.tokenPreview || "oauth-token-••••••••");
+      setLabel(result.email || "Gemini OAuth");
+      setModel(getDefaultModelForProvider("google-gemini-cli" as LLMProvider)?.modelId ?? "");
+    } catch (err) {
+      setProviderError({ key: "onboarding.failedToSave", detail: String(err) });
+    } finally {
+      setOauthLoading(false);
+    }
+  }
+
+  async function handleOAuthSave() {
+    setValidating(true);
+    setProviderError(null);
+    try {
+      const proxy = proxyUrl.trim() || undefined;
+      await saveOAuthFlow("google-gemini-cli", {
+        proxyUrl: proxy,
+        label: label.trim() || "Gemini OAuth",
+        model: model || (getDefaultModelForProvider("google-gemini-cli" as LLMProvider)?.modelId ?? ""),
+      });
+      await updateSettings({ "llm-provider": "google-gemini-cli" });
+      trackEvent("onboarding.provider_saved", { provider: "google-gemini-cli" });
+      setCurrentStep(1);
+    } catch (err) {
+      setProviderError({ key: "providers.invalidKey", detail: String(err) });
+    } finally {
+      setSaving(false);
+      setValidating(false);
+    }
   }
 
   async function handleSaveProvider() {
@@ -184,6 +227,7 @@ export function OnboardingPage({
             <div className="form-group">
               <div className="form-label">{t("onboarding.providerLabel")}</div>
               <ProviderSelect value={provider} onChange={handleProviderChange} />
+              {!isOAuthProvider && (
               <div className="form-help-sm provider-links">
                 <a
                   href={PROVIDER_API_KEY_URLS[provider as LLMProvider]}
@@ -202,67 +246,141 @@ export function OnboardingPage({
                   </a>
                 )}
               </div>
-            </div>
-
-            <div className="form-group">
-              <div className="form-label">{t("onboarding.modelLabel")}</div>
-              <ModelSelect provider={provider} value={model} onChange={setModel} />
-            </div>
-
-            <label className="form-group" style={{ display: "block" }}>
-              {provider === "anthropic" ? t("onboarding.anthropicTokenLabel") : t("onboarding.apiKeyLabel")}
-              <input
-                className="input-full input-mono"
-                type="password"
-                autoComplete="off"
-                data-1p-ignore
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={provider === "anthropic" ? t("onboarding.anthropicTokenPlaceholder") : t("onboarding.apiKeyPlaceholder")}
-                style={{ display: "block", marginTop: 4 }}
-              />
-              <small className="form-help-sm">
-                {t("onboarding.apiKeyHelp")}
-              </small>
-              {provider === "anthropic" && (
-                <div className="info-box info-box-yellow" style={{ marginTop: 8 }}>
-                  {t("providers.anthropicTokenWarning")}
-                </div>
               )}
-            </label>
+            </div>
 
-            <div className="mb-md">
-              <button
-                className="advanced-toggle"
-                onClick={() => setShowAdvanced(!showAdvanced)}
-              >
-                <span style={{ transform: showAdvanced ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>&#9654;</span>
-                {t("providers.advancedSettings")}
-              </button>
-              {showAdvanced && (
-                <div className="advanced-content">
-                  <div className="form-label text-secondary">{t("providers.proxyLabel")}</div>
+            {isOAuthProvider ? (
+              <>
+                <div className="form-group">
+                  <div className="form-label">{t("onboarding.modelLabel")}</div>
+                  <ModelSelect provider={provider} value={model} onChange={setModel} />
+                </div>
+
+                {oauthTokenPreview ? (
+                  <div className="form-group">
+                    <div className="form-label">{t("providers.oauthTokenLabel")}</div>
+                    <input
+                      type="text"
+                      readOnly
+                      value={oauthTokenPreview}
+                      className="input-full input-mono input-readonly"
+                    />
+                    <small className="form-help-sm">
+                      {t("providers.oauthTokenHelp")}
+                    </small>
+                  </div>
+                ) : (
+                  <div className="info-box info-box-green">
+                    {t("providers.oauthGeminiInfo")}
+                  </div>
+                )}
+
+                <div className="mb-md">
+                  <button
+                    className="advanced-toggle"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                  >
+                    <span style={{ transform: showAdvanced ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>&#9654;</span>
+                    {t("providers.advancedSettings")}
+                  </button>
+                  {showAdvanced && (
+                    <div className="advanced-content">
+                      <div className="form-label text-secondary">{t("providers.proxyLabel")}</div>
+                      <input
+                        className="input-full input-mono"
+                        type="text"
+                        value={proxyUrl}
+                        onChange={(e) => setProxyUrl(e.target.value)}
+                        placeholder={t("providers.proxyPlaceholder")}
+                      />
+                      <small className="form-help-sm">
+                        {t("providers.proxyHelp")}
+                      </small>
+                    </div>
+                  )}
+                </div>
+
+                {oauthTokenPreview ? (
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleOAuthSave}
+                    disabled={saving || validating}
+                  >
+                    {validating ? t("onboarding.validating") : saving ? t("onboarding.saving") : t("onboarding.saveAndContinue")}
+                  </button>
+                ) : (
+                  <button
+                    className="btn btn-primary"
+                    onClick={handleGeminiOAuth}
+                    disabled={oauthLoading}
+                  >
+                    {oauthLoading ? t("providers.oauthLoading") : t("providers.oauthSignIn")}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <div className="form-group">
+                  <div className="form-label">{t("onboarding.modelLabel")}</div>
+                  <ModelSelect provider={provider} value={model} onChange={setModel} />
+                </div>
+
+                <label className="form-group" style={{ display: "block" }}>
+                  {provider === "anthropic" ? t("onboarding.anthropicTokenLabel") : t("onboarding.apiKeyLabel")}
                   <input
                     className="input-full input-mono"
-                    type="text"
-                    value={proxyUrl}
-                    onChange={(e) => setProxyUrl(e.target.value)}
-                    placeholder={t("providers.proxyPlaceholder")}
+                    type="password"
+                    autoComplete="off"
+                    data-1p-ignore
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={provider === "anthropic" ? t("onboarding.anthropicTokenPlaceholder") : t("onboarding.apiKeyPlaceholder")}
+                    style={{ display: "block", marginTop: 4 }}
                   />
                   <small className="form-help-sm">
-                    {t("providers.proxyHelp")}
+                    {t("onboarding.apiKeyHelp")}
                   </small>
-                </div>
-              )}
-            </div>
+                  {provider === "anthropic" && (
+                    <div className="info-box info-box-yellow" style={{ marginTop: 8 }}>
+                      {t("providers.anthropicTokenWarning")}
+                    </div>
+                  )}
+                </label>
 
-            <button
-              className="btn btn-primary"
-              onClick={handleSaveProvider}
-              disabled={saving || validating}
-            >
-              {validating ? t("onboarding.validating") : saving ? t("onboarding.saving") : t("onboarding.saveAndContinue")}
-            </button>
+                <div className="mb-md">
+                  <button
+                    className="advanced-toggle"
+                    onClick={() => setShowAdvanced(!showAdvanced)}
+                  >
+                    <span style={{ transform: showAdvanced ? "rotate(90deg)" : "none", transition: "transform 0.2s", display: "inline-block" }}>&#9654;</span>
+                    {t("providers.advancedSettings")}
+                  </button>
+                  {showAdvanced && (
+                    <div className="advanced-content">
+                      <div className="form-label text-secondary">{t("providers.proxyLabel")}</div>
+                      <input
+                        className="input-full input-mono"
+                        type="text"
+                        value={proxyUrl}
+                        onChange={(e) => setProxyUrl(e.target.value)}
+                        placeholder={t("providers.proxyPlaceholder")}
+                      />
+                      <small className="form-help-sm">
+                        {t("providers.proxyHelp")}
+                      </small>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSaveProvider}
+                  disabled={saving || validating}
+                >
+                  {validating ? t("onboarding.validating") : saving ? t("onboarding.saving") : t("onboarding.saveAndContinue")}
+                </button>
+              </>
+            )}
             </div>
 
             {/* Right: pricing table */}
