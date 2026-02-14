@@ -433,8 +433,9 @@ app.whenReady().then(async () => {
     if (!latestUpdateResult?.updateAvailable || !latestUpdateResult.download) {
       throw new Error("No update available");
     }
-    if (updateDownloadState.status === "downloading") {
-      throw new Error("Download already in progress");
+    if (updateDownloadState.status === "downloading" || updateDownloadState.status === "verifying") {
+      log.info("Update download already in progress, ignoring duplicate request");
+      return;
     }
 
     const platform = getPlatformKey();

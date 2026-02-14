@@ -89,15 +89,20 @@ export function Layout({
       .catch(() => {});
   }, []);
 
-  // Poll download status while active
+  // Poll download status: fast (500ms) when actively downloading, slow (3s) when banner is visible
   useEffect(() => {
+    if (!updateInfo) return;
     const active = downloadStatus.status === "downloading" || downloadStatus.status === "verifying" || downloadStatus.status === "installing";
-    if (!active) return;
+    const interval = active ? 500 : 3000;
     const id = setInterval(() => {
-      fetchUpdateDownloadStatus().then(setDownloadStatus).catch(() => {});
-    }, 500);
+      fetchUpdateDownloadStatus().then((s) => {
+        setDownloadStatus(s);
+        // Un-dismiss banner if download was started externally (e.g. tray menu)
+        if (s.status !== "idle") setDismissed(false);
+      }).catch(() => {});
+    }, interval);
     return () => clearInterval(id);
-  }, [downloadStatus.status]);
+  }, [downloadStatus.status, updateInfo]);
 
   function handleDownload() {
     setDownloadStatus({ status: "downloading", percent: 0 });

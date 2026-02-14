@@ -53,7 +53,10 @@ function convertAudioToMp3(input: Buffer, inputFormat: string): Promise<{ data: 
  */
 async function proxiedFetch(url: string | URL, init?: RequestInit): Promise<Response> {
   const { ProxyAgent } = await import("undici");
-  return fetch(url, { ...init, dispatcher: new ProxyAgent("http://127.0.0.1:9999") } as RequestInit);
+  // Cast dispatcher to any: undici's ProxyAgent extends undici.Dispatcher but
+  // Node's built-in RequestInit expects undici-types.Dispatcher — structurally
+  // equivalent but TS sees them as incompatible due to duplicate type packages.
+  return fetch(url, { ...init, dispatcher: new ProxyAgent("http://127.0.0.1:9999") as any });
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -1155,7 +1158,7 @@ async function validateProviderApiKey(
   // Per-key proxy is typically outside GFW and can reach the API directly.
   // If no per-key proxy, fall back to proxy router which handles system proxy / direct.
   const { ProxyAgent } = await import("undici");
-  const dispatcher = new ProxyAgent(proxyUrl || "http://127.0.0.1:9999");
+  const dispatcher: any = new ProxyAgent(proxyUrl || "http://127.0.0.1:9999");
 
   try {
     let res: Response;
@@ -1372,12 +1375,9 @@ export function startPanelServer(options: PanelServerOptions): Server {
           sendJson(res, 501, { error: "Not supported" });
           return;
         }
-        onUpdateDownload()
-          .then(() => sendJson(res, 200, { ok: true }))
-          .catch((err: unknown) => {
-            const msg = err instanceof Error ? err.message : String(err);
-            sendJson(res, 500, { error: msg });
-          });
+        // Fire-and-forget: respond immediately, errors are tracked in download state
+        onUpdateDownload().catch(() => {});
+        sendJson(res, 200, { ok: true });
         return;
       }
 
