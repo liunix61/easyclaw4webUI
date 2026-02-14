@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.2.3",
+    "date": "2026-02-14",
+    "en": [
+      "In-app auto-update: download, verify, and install updates without leaving the app",
+      "Web search now falls back to browser when API is unavailable"
+    ],
+    "zh": [
+      "应用内自动更新：无需离开应用即可下载、验证并安装更新",
+      "网页搜索在 API 不可用时自动回退到浏览器搜索"
+    ]
+  },
+  {
     "version": "1.2.2",
     "date": "2026-02-13",
     "en": [
