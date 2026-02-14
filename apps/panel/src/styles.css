@@ -1188,6 +1188,11 @@ tbody td {
   font-size: 12px;
 }
 
+.btn-invisible {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .td-date {
   font-size: 12px;
   color: var(--color-text-muted);
@@ -1352,7 +1357,7 @@ tbody td {
 .key-info {
   flex: 1;
   min-width: 0;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .key-meta {
@@ -2295,6 +2300,7 @@ tbody td {
 /* ===== 38. Pricing Table ===== */
 
 .pricing-card {
+  font-size: 11px;
   padding: 16px 18px;
   height: 100%;
   box-sizing: border-box;
@@ -2351,7 +2357,7 @@ tbody td {
 
 .pricing-inner-table {
   width: 100%;
-  font-size: 12px;
+  font-size: 11px;
   border-collapse: collapse;
 }
 
@@ -2379,7 +2385,7 @@ tbody td {
 }
 
 .pricing-inner-table td {
-  padding: 5px 6px;
+  padding: 3px 6px;
 }
 
 .pricing-model-name {

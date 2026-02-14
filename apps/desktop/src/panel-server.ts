@@ -166,7 +166,7 @@ function startWeComRelay(params: {
     token: params.gatewayToken,
     onEvent: (evt) => {
       if (evt.event === "chat") {
-        handleWeComChatEvent(evt.payload);
+        handleWeComChatEvent(evt.payload).catch((err) => log.error("WeCom: chat event handler error:", err));
       }
     },
   });
@@ -358,7 +358,7 @@ async function handleWeComInbound(frame: {
 }
 
 /** Handle a gateway 'chat' event — extract the AI reply and send it back to WeCom. */
-function handleWeComChatEvent(payload: unknown): void {
+async function handleWeComChatEvent(payload: unknown): Promise<void> {
   const p = payload as Record<string, unknown> | null;
   if (!p) return;
 
@@ -391,27 +391,67 @@ function handleWeComChatEvent(payload: unknown): void {
 
   if (!Array.isArray(content)) return;
 
-  const texts: string[] = [];
-  const images: Array<{ data: string; mimeType: string }> = [];
-
+  // Collect raw text from content blocks
+  const rawTexts: string[] = [];
   for (const c of content) {
     const block = c as Record<string, unknown>;
     if (block.type === "text" && typeof block.text === "string") {
-      texts.push(block.text as string);
-    } else if (block.type === "image") {
-      const source = block.source as Record<string, unknown> | undefined;
-      if (source?.type === "base64" && typeof source.data === "string") {
-        images.push({
-          data: source.data as string,
-          mimeType: (source.media_type as string) ?? "image/png",
-        });
+      rawTexts.push(block.text as string);
+    }
+  }
+
+  // Parse MEDIA: directives from text — the agent outputs images as
+  // "MEDIA:/path/to/file.jpg" text directives, not as base64 content blocks.
+  const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/gi;
+  const mediaFiles: string[] = [];
+  const cleanedTexts: string[] = [];
+
+  for (const raw of rawTexts) {
+    const lines = raw.split("\n");
+    const kept: string[] = [];
+    for (const line of lines) {
+      const match = MEDIA_RE.exec(line);
+      MEDIA_RE.lastIndex = 0; // reset global regex
+      if (match) {
+        const filePath = match[1].replace(/^[`"']+/, "").replace(/[`"']+$/, "").trim();
+        if (filePath.startsWith("/") && /\.\w{1,10}$/.test(filePath)) {
+          mediaFiles.push(filePath);
+          // Strip the MEDIA: directive from text
+          const cleaned = line.replace(MEDIA_RE, "").trim();
+          MEDIA_RE.lastIndex = 0;
+          if (cleaned) kept.push(cleaned);
+          continue;
+        }
       }
+      kept.push(line);
+    }
+    const cleaned = kept.join("\n").trim();
+    if (cleaned) cleanedTexts.push(cleaned);
+  }
+
+  // Read media files from disk and prepare image payloads
+  const images: Array<{ data: string; mimeType: string }> = [];
+  for (const filePath of mediaFiles) {
+    try {
+      const data = await fs.readFile(filePath);
+      const ext = extname(filePath).toLowerCase();
+      const mimeMap: Record<string, string> = {
+        ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+        ".png": "image/png", ".gif": "image/gif",
+        ".webp": "image/webp", ".bmp": "image/bmp",
+      };
+      images.push({
+        data: data.toString("base64"),
+        mimeType: mimeMap[ext] ?? "image/png",
+      });
+    } catch (err) {
+      log.error(`WeCom: failed to read media file ${filePath}: ${err}`);
     }
   }
 
   if (wecomRelayWs && wecomRelayWs.readyState === WebSocket.OPEN) {
-    // Send text reply
-    const replyText = texts.join("\n\n").trim();
+    // Send text reply (with MEDIA: directives stripped)
+    const replyText = cleanedTexts.join("\n\n").trim();
     if (replyText) {
       wecomRelayWs.send(JSON.stringify({
         type: "reply",

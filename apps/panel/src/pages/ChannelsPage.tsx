@@ -335,6 +335,7 @@ export function ChannelsPage() {
         configured: true,
         running: wecomStatus.connected === true,
         enabled: true,
+        dmPolicy: "pairing",
       } as ChannelAccountSnapshot,
     });
   }
@@ -492,7 +493,12 @@ export function ChannelsPage() {
                     <td>{account.dmPolicy ? t(`channels.dmPolicyLabel_${account.dmPolicy}`, { defaultValue: account.dmPolicy }) : "—"}</td>
                     <td>
                       <div className="td-actions">
-                        {!isWecom && (
+                        {isWecom ? (
+                          <>
+                            <button className="btn btn-secondary btn-invisible" disabled aria-hidden="true">{t("common.edit")}</button>
+                            <button className="btn btn-secondary btn-invisible" disabled aria-hidden="true">{t("pairing.allowlist")}</button>
+                          </>
+                        ) : (
                           <>
                             <button
                               className="btn btn-secondary"

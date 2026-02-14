@@ -29,10 +29,23 @@ const plugin = {
         },
         capabilities: {
           chatTypes: ["direct"],
+          media: true,
         },
         config: {
           listAccountIds: () => [],
           resolveAccount: () => null,
+        },
+        outbound: {
+          deliveryMode: "gateway",
+          textChunkLimit: 2048,
+          async sendText({ to, text }) {
+            // Delivery is handled by the EasyClaw desktop gateway via WeCom relay.
+            // This adapter exists so the agent knows wechat supports outbound.
+            return { channel: "wechat", messageId: "", chatId: to ?? "" };
+          },
+          async sendMedia({ to, text, mediaUrl }) {
+            return { channel: "wechat", messageId: "", chatId: to ?? "" };
+          },
         },
       },
     });
