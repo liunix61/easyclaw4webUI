@@ -145,11 +145,18 @@ jobs:
           name: macos-installers
           path: ./release/macos
 
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/RELEASE_BODY.md
+          sparse-checkout-cone-mode: false
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           generate_release_notes: true
+          body_path: .github/RELEASE_BODY.md
           files: |
             release/windows/*.exe
             release/macos/*.dmg

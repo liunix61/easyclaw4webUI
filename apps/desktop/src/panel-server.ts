@@ -331,9 +331,26 @@ async function handleWeComInbound(frame: {
     }
   }
 
-  // Pass image data as attachments so the agent can see the image
+  // Pass image data as attachments so the agent can see the image.
+  // Also save to disk so the agent can reference the file path later (e.g. to send it back).
   if (frame.msg_type === "image" && frame.media_data && frame.media_mime) {
-    message = message || "[图片]";
+    const extMap: Record<string, string> = {
+      "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif",
+      "image/webp": ".webp", "image/bmp": ".bmp",
+    };
+    const ext = extMap[frame.media_mime] ?? ".jpg";
+    const mediaDir = join(homedir(), ".easyclaw", "openclaw", "media", "inbound");
+    const fileName = `wecom-${Date.now()}${ext}`;
+    const filePath = join(mediaDir, fileName);
+    try {
+      await fs.mkdir(mediaDir, { recursive: true });
+      await fs.writeFile(filePath, Buffer.from(frame.media_data, "base64"));
+      message = `[用户发来图片，已保存至 ${filePath}]`;
+      log.info(`WeCom: saved inbound image to ${filePath}`);
+    } catch (err) {
+      log.error(`WeCom: failed to save inbound image: ${err}`);
+      message = message || "[图片]";
+    }
     attachments = [{
       type: "image",
       mimeType: frame.media_mime,
@@ -389,19 +406,18 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
   const message = p.message as Record<string, unknown> | undefined;
   const content = message?.content;
 
-  if (!Array.isArray(content)) return;
-
   // Collect raw text from content blocks
   const rawTexts: string[] = [];
-  for (const c of content) {
-    const block = c as Record<string, unknown>;
-    if (block.type === "text" && typeof block.text === "string") {
-      rawTexts.push(block.text as string);
+  if (Array.isArray(content)) {
+    for (const c of content) {
+      const block = c as Record<string, unknown>;
+      if (block.type === "text" && typeof block.text === "string") {
+        rawTexts.push(block.text as string);
+      }
     }
   }
 
-  // Parse MEDIA: directives from text — the agent outputs images as
-  // "MEDIA:/path/to/file.jpg" text directives, not as base64 content blocks.
+  // Parse MEDIA: directives from text (fallback path when agent outputs MEDIA: in text)
   const MEDIA_RE = /\bMEDIA:\s*`?([^\n`]+)`?/gi;
   const mediaFiles: string[] = [];
   const cleanedTexts: string[] = [];
@@ -411,12 +427,11 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
     const kept: string[] = [];
     for (const line of lines) {
       const match = MEDIA_RE.exec(line);
-      MEDIA_RE.lastIndex = 0; // reset global regex
+      MEDIA_RE.lastIndex = 0;
       if (match) {
         const filePath = match[1].replace(/^[`"']+/, "").replace(/[`"']+$/, "").trim();
         if (filePath.startsWith("/") && /\.\w{1,10}$/.test(filePath)) {
           mediaFiles.push(filePath);
-          // Strip the MEDIA: directive from text
           const cleaned = line.replace(MEDIA_RE, "").trim();
           MEDIA_RE.lastIndex = 0;
           if (cleaned) kept.push(cleaned);
@@ -427,6 +442,23 @@ async function handleWeComChatEvent(payload: unknown): Promise<void> {
     }
     const cleaned = kept.join("\n").trim();
     if (cleaned) cleanedTexts.push(cleaned);
+  }
+
+  // Fetch pending images queued by the plugin's sendMedia (primary path).
+  // The plugin stores outbound images in memory; we retrieve them via a
+  // custom gateway RPC method: wecom_get_pending_images.
+  try {
+    const result = await wecomGatewayRpc?.request<{ images?: Array<{ to: string; mediaUrl: string; text: string }> }>(
+      "wecom_get_pending_images",
+    );
+    if (result?.images?.length) {
+      for (const img of result.images) {
+        if (img.mediaUrl) mediaFiles.push(img.mediaUrl);
+      }
+      log.info(`WeCom: retrieved ${result.images.length} pending image(s) from plugin`);
+    }
+  } catch (err) {
+    log.warn(`WeCom: failed to get pending images: ${err}`);
   }
 
   // Read media files from disk and prepare image payloads
