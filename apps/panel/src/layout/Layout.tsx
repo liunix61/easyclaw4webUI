@@ -80,13 +80,19 @@ export function Layout({
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const isDragging = useRef(false);
 
+  // Check for updates after 5s + retry once at 20s to handle startup race
   useEffect(() => {
-    fetchUpdateInfo()
-      .then((info) => {
-        if (info.currentVersion) setCurrentVersion(info.currentVersion);
-        if (info.updateAvailable) setUpdateInfo(info);
-      })
-      .catch(() => {});
+    function check() {
+      fetchUpdateInfo()
+        .then((info) => {
+          if (info.currentVersion) setCurrentVersion(info.currentVersion);
+          if (info.updateAvailable) setUpdateInfo(info);
+        })
+        .catch(() => {});
+    }
+    const firstTimer = setTimeout(check, 5_000);
+    const retryTimer = setTimeout(check, 20_000);
+    return () => { clearTimeout(firstTimer); clearTimeout(retryTimer); };
   }, []);
 
   // Poll download status: fast (500ms) when actively downloading, slow (3s) when banner is visible
