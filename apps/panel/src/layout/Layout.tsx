@@ -73,7 +73,6 @@ export function Layout({
 }) {
   const { t } = useTranslation();
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [dismissed, setDismissed] = useState(false);
   const [downloadStatus, setDownloadStatus] = useState<UpdateDownloadStatus>({ status: "idle" });
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
@@ -103,8 +102,6 @@ export function Layout({
     const id = setInterval(() => {
       fetchUpdateDownloadStatus().then((s) => {
         setDownloadStatus(s);
-        // Un-dismiss banner if download was started externally (e.g. tray menu)
-        if (s.status !== "idle") setDismissed(false);
       }).catch(() => {});
     }, interval);
     return () => clearInterval(id);
@@ -174,7 +171,7 @@ export function Layout({
     // { path: "/settings", label: t("nav.settings") },
   ];
 
-  const showBanner = updateInfo && !dismissed;
+  const showBanner = !!updateInfo;
   const ds = downloadStatus;
 
   return (
@@ -223,14 +220,6 @@ export function Layout({
               </>
             )}
           </span>
-          {ds.status === "idle" && (
-            <button
-              className="update-banner-dismiss"
-              onClick={() => setDismissed(true)}
-            >
-              {t("update.dismiss")}
-            </button>
-          )}
         </div>
       )}
       <div className="layout-body">

@@ -30,11 +30,11 @@ import { ProxyRouter } from "@easyclaw/proxy-router";
 import type { ProxyRouterConfig } from "@easyclaw/proxy-router";
 import { RemoteTelemetryClient } from "@easyclaw/telemetry";
 import { getDeviceId } from "@easyclaw/device-id";
-import { checkForUpdate, downloadAndVerify, getPlatformKey, installWindows, installMacOS, resolveAppBundlePath } from "@easyclaw/updater";
+import { checkForUpdate, downloadAndVerify, getPlatformKey, installWindows, installMacOS, resolveAppBundlePath, isNewerVersion } from "@easyclaw/updater";
 import type { UpdateCheckResult, UpdateDownloadState, DownloadProgress } from "@easyclaw/updater";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, readFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { createTrayIcon } from "./tray-icon.js";
 import { buildTrayMenu } from "./tray-menu.js";
@@ -288,21 +288,40 @@ const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
   let killedStale = false;
   try {
-    // Find all EasyClaw processes except ourselves and kill them
-    const out = execSync("pgrep -x EasyClaw 2>/dev/null || true", {
-      encoding: "utf-8",
-      timeout: 3000,
-    }).trim();
-    const pids = out
-      .split("\n")
-      .filter(Boolean)
-      .map(Number)
-      .filter((pid) => pid !== process.pid && !isNaN(pid));
-    for (const pid of pids) {
-      try {
-        process.kill(pid, "SIGKILL");
-        killedStale = true;
-      } catch {}
+    if (process.platform === "win32") {
+      // On Windows, use WMIC to find EasyClaw.exe PIDs
+      const out = execSync('wmic process where "name=\'EasyClaw.exe\'" get ProcessId 2>nul', {
+        encoding: "utf-8",
+        timeout: 3000,
+      }).trim();
+      const pids = out
+        .split("\n")
+        .slice(1) // skip header row
+        .map((line) => parseInt(line.trim(), 10))
+        .filter((pid) => pid !== process.pid && !isNaN(pid));
+      for (const pid of pids) {
+        try {
+          process.kill(pid, "SIGKILL");
+          killedStale = true;
+        } catch {}
+      }
+    } else {
+      // On macOS/Linux, use pgrep
+      const out = execSync("pgrep -x EasyClaw 2>/dev/null || true", {
+        encoding: "utf-8",
+        timeout: 3000,
+      }).trim();
+      const pids = out
+        .split("\n")
+        .filter(Boolean)
+        .map(Number)
+        .filter((pid) => pid !== process.pid && !isNaN(pid));
+      for (const pid of pids) {
+        try {
+          process.kill(pid, "SIGKILL");
+          killedStale = true;
+        } catch {}
+      }
     }
   } catch {}
 
@@ -393,6 +412,13 @@ app.whenReady().then(async () => {
     latestUpdateResult = result;
     if (result.updateAvailable) {
       log.info(`Update available: v${result.latestVersion}`);
+      // Invalidate stale ready download if a newer version supersedes it
+      const rv = readyCache.version;
+      if (rv && rv !== result.latestVersion) {
+        log.info(`Clearing stale ready download v${rv} (latest is v${result.latestVersion})`);
+        readyCache.clear();
+        updateDownloadState = { status: "idle" };
+      }
       telemetryClient?.track("app.update_available", {
         currentVersion: app.getVersion(),
         latestVersion: result.latestVersion,
@@ -429,13 +455,67 @@ app.whenReady().then(async () => {
   let updateDownloadState: UpdateDownloadState = { status: "idle" };
   let downloadAbortController: AbortController | null = null;
 
+  /** Persists which version has been downloaded and is ready to install. */
+  class ReadyUpdateCache {
+    private readonly versionFile: string;
+    readonly filePath: string;
+
+    constructor(tempDir: string) {
+      this.versionFile = join(tempDir, "easyclaw-ready-version");
+      const ext = process.platform === "darwin" ? "zip" : "exe";
+      this.filePath = join(tempDir, `easyclaw-update.${ext}`);
+    }
+
+    /** The version that is downloaded and ready, or null if nothing is ready. */
+    get version(): string | null {
+      try {
+        const v = readFileSync(this.versionFile, "utf-8").trim();
+        if (v && existsSync(this.filePath)) return v;
+      } catch {}
+      return null;
+    }
+
+    save(version: string): void {
+      try { writeFileSync(this.versionFile, version, "utf-8"); } catch {}
+    }
+
+    clear(): void {
+      try { unlinkSync(this.versionFile); } catch {}
+      try { unlinkSync(this.filePath); } catch {}
+    }
+  }
+
+  const readyCache = new ReadyUpdateCache(app.getPath("temp"));
+
+  // Restore ready state from previous session
+  const restoredVersion = readyCache.version;
+  if (restoredVersion && isNewerVersion(app.getVersion(), restoredVersion)) {
+    updateDownloadState = { status: "ready", filePath: readyCache.filePath };
+    log.info(`Restored ready update: v${restoredVersion} at ${readyCache.filePath}`);
+  } else if (restoredVersion) {
+    // Same or older than current version — already installed, clean up
+    log.info(`Clearing stale ready update v${restoredVersion} (current is v${app.getVersion()})`);
+    readyCache.clear();
+  }
+
   async function performUpdateDownload(): Promise<void> {
     if (!latestUpdateResult?.updateAvailable || !latestUpdateResult.download) {
       throw new Error("No update available");
     }
     if (updateDownloadState.status === "downloading" || updateDownloadState.status === "verifying") {
-      log.info("Update download already in progress, ignoring duplicate request");
+      log.info(`Update download already ${updateDownloadState.status}, ignoring duplicate request`);
       return;
+    }
+    // If already ready, check if it's for the same version being requested
+    if (updateDownloadState.status === "ready") {
+      const rv = readyCache.version;
+      if (rv === latestUpdateResult.latestVersion) {
+        log.info(`Update v${rv} already downloaded, ignoring duplicate request`);
+        return;
+      }
+      // Ready version is stale (newer version available), clear and re-download
+      log.info(`Clearing stale download v${rv} to download v${latestUpdateResult.latestVersion}`);
+      readyCache.clear();
     }
 
     const platform = getPlatformKey();
@@ -444,7 +524,6 @@ app.whenReady().then(async () => {
     let downloadUrl: string;
     let expectedSha256: string;
     let expectedSize: number;
-    let fileName: string;
 
     if (platform === "mac") {
       // Use zip for in-app update on macOS
@@ -456,15 +535,12 @@ app.whenReady().then(async () => {
       downloadUrl = download.zipUrl;
       expectedSha256 = download.zipSha256;
       expectedSize = download.zipSize ?? download.size;
-      fileName = "easyclaw-update.zip";
     } else {
       downloadUrl = download.url;
       expectedSha256 = download.sha256;
       expectedSize = download.size;
-      fileName = "easyclaw-update.exe";
     }
 
-    const destPath = join(app.getPath("temp"), fileName);
     downloadAbortController = new AbortController();
     updateDownloadState = { status: "downloading", percent: 0, downloadedBytes: 0, totalBytes: expectedSize };
     mainWindow?.setProgressBar(0);
@@ -472,7 +548,7 @@ app.whenReady().then(async () => {
     try {
       const result = await downloadAndVerify(
         downloadUrl,
-        destPath,
+        readyCache.filePath,
         expectedSha256,
         expectedSize,
         (progress: DownloadProgress) => {
@@ -487,9 +563,10 @@ app.whenReady().then(async () => {
         downloadAbortController.signal,
       );
 
+      readyCache.save(latestUpdateResult.latestVersion!);
       updateDownloadState = { status: "ready", filePath: result.filePath };
       mainWindow?.setProgressBar(-1);
-      log.info(`Update downloaded and verified: ${result.filePath}`);
+      log.info(`Update v${latestUpdateResult.latestVersion} downloaded and verified: ${result.filePath}`);
       telemetryClient?.track("app.update_downloaded", {
         version: latestUpdateResult.latestVersion,
       });
@@ -511,6 +588,8 @@ app.whenReady().then(async () => {
     const filePath = updateDownloadState.filePath;
     const platform = getPlatformKey();
     updateDownloadState = { status: "installing" };
+    // Don't call readyCache.clear() here — the installer needs the file.
+    // Cleanup happens on next startup: new version sees readyVersion == currentVersion → clear.
 
     telemetryClient?.track("app.update_installing", {
       version: latestUpdateResult?.latestVersion,
@@ -632,7 +711,11 @@ app.whenReady().then(async () => {
 
   // Clean up any existing openclaw processes before starting (both openclaw and openclaw-gateway)
   try {
-    execSync("pkill -x 'openclaw-gateway' || true; pkill -x 'openclaw' || true", { stdio: "ignore" });
+    if (process.platform === "win32") {
+      execSync("taskkill /f /im openclaw-gateway.exe 2>nul & taskkill /f /im openclaw.exe 2>nul & exit /b 0", { stdio: "ignore", shell: "cmd.exe" });
+    } else {
+      execSync("pkill -x 'openclaw-gateway' || true; pkill -x 'openclaw' || true", { stdio: "ignore" });
+    }
     log.info("Cleaned up existing openclaw processes");
   } catch (err) {
     log.warn("Failed to cleanup openclaw processes:", err);
