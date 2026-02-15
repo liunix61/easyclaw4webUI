@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.2.7",
+    "date": "2026-02-15",
+    "en": [
+      "Compress chat images client-side to fit WebSocket 512KB frame limit",
+      "Delay update check to avoid startup race condition"
+    ],
+    "zh": [
+      "客户端压缩聊天图片以适应 WebSocket 512KB 帧限制",
+      "延迟更新检查以避免启动时竞态条件"
+    ]
+  },
+  {
     "version": "1.2.6",
     "date": "2026-02-14",
     "en": [
