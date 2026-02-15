@@ -10,6 +10,9 @@
     "dev": "electron-rebuild -f -o better-sqlite3 && tsdown && PANEL_DEV_URL=http://localhost:5180 ELECTRON_RUN_AS_NODE= electron .",
     "lint": "oxlint",
     "test": "vitest run",
+    "test:e2e": "playwright test --config e2e/playwright.config.ts",
+    "test:e2e:dev": "playwright test --config e2e/playwright.config.ts",
+    "test:e2e:prod": "E2E_PROD=1 playwright test --config e2e/playwright.config.ts",
     "pack": "electron-builder --dir",
     "dist:mac": "node scripts/prune-vendor-deps.cjs && electron-builder --mac",
     "dist:mac:arm64": "node scripts/prune-vendor-deps.cjs && electron-builder --mac dmg --arm64 && node scripts/sign-arm64.cjs",
@@ -32,12 +35,14 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.18.1",
     "@electron/notarize": "^3.0.0",
     "@electron/rebuild": "^4.0.3",
+    "@playwright/test": "^1.58.2",
+    "@types/ws": "^8.18.1",
     "electron": "^35.1.2",
     "electron-builder": "^26.0.12",
     "oxlint": "^1.43.0",
+    "playwright": "^1.58.2",
     "tsdown": "^0.20.3",
     "vitest": "^4.0.18"
   }
