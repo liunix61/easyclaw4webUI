@@ -3,12 +3,13 @@
 # release-local.sh — Build, test (e2e), and upload release to GitHub
 #
 # Usage:
-#   ./scripts/release-local.sh [version] [--skip-tests] [--skip-upload]
+#   ./scripts/release-local.sh [version] [--skip-tests] [--skip-upload] [--upload-only]
 #
 # Examples:
 #   ./scripts/release-local.sh 1.2.8          # full pipeline
 #   ./scripts/release-local.sh --skip-tests   # build + upload only
 #   ./scripts/release-local.sh --skip-upload  # build + test, no upload
+#   ./scripts/release-local.sh 1.2.8 --upload-only  # upload existing artifacts only
 #
 # Pipeline:
 #   1. rebuild-native.sh         — prebuild better-sqlite3 for Node.js + Electron
@@ -45,12 +46,14 @@ step()  { echo ""; echo "========================================"; echo "  STEP
 # ---- Parse arguments ----
 SKIP_TESTS=false
 SKIP_UPLOAD=false
+UPLOAD_ONLY=false
 VERSION=""
 
 for arg in "$@"; do
   case "$arg" in
     --skip-tests)  SKIP_TESTS=true ;;
     --skip-upload) SKIP_UPLOAD=true ;;
+    --upload-only) UPLOAD_ONLY=true ;;
     *)             VERSION="$arg" ;;
   esac
 done
@@ -62,6 +65,7 @@ fi
 
 info "Release pipeline for EasyClaw v$VERSION"
 info "Platform: $(uname -s) ($(uname -m))"
+[ "$UPLOAD_ONLY" = true ] && info "Mode: upload-only (skipping build/test steps)"
 
 # ---- Determine platform ----
 case "$(uname -s)" in
@@ -69,6 +73,11 @@ case "$(uname -s)" in
   MINGW*|MSYS*) PLATFORM="win" ;;
   *)            PLATFORM="linux" ;;
 esac
+
+if [ "$UPLOAD_ONLY" = true ]; then
+  # Jump straight to upload
+  info "Skipping steps 1-7 (--upload-only)."
+else
 
 # ---- Step 1: Prebuild native modules ----
 step "Prebuild native modules (Node.js + Electron)"
@@ -134,6 +143,8 @@ else
   warn "No dist target for platform $PLATFORM"
 fi
 
+fi  # end of UPLOAD_ONLY skip
+
 # ---- Step 8: Upload to GitHub Release ----
 if [ "$SKIP_UPLOAD" = true ]; then
   info "Skipping upload (--skip-upload flag)."
@@ -170,9 +181,11 @@ fi
 # ---- Restore native prebuilds ----
 # electron-builder's internal electron-rebuild may overwrite build/Release/.
 # Re-run rebuild-native.sh to ensure both prebuilds are intact for dev use.
-step "Restore native prebuilds"
-bash "$REPO_ROOT/scripts/rebuild-native.sh"
-info "Native prebuilds restored."
+if [ "$UPLOAD_ONLY" = false ]; then
+  step "Restore native prebuilds"
+  bash "$REPO_ROOT/scripts/rebuild-native.sh"
+  info "Native prebuilds restored."
+fi
 
 # ---- Done ----
 echo ""
