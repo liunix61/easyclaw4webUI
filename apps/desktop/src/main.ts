@@ -589,14 +589,14 @@ app.whenReady().then(async () => {
   const sttEnabled = storage.settings.get("stt.enabled") === "true";
   const sttProvider = (storage.settings.get("stt.provider") || "groq") as "groq" | "volcengine";
 
-  // In packaged app, plugins live in Resources/<name>/.
-  // In dev, config-writer resolves plugin paths via monorepo root.
+  // In packaged app, plugins/extensions live in Resources/.
+  // In dev, config-writer auto-resolves via monorepo root.
   const filePermissionsPluginPath = app.isPackaged
     ? join(process.resourcesPath, "file-permissions-plugin", "easyclaw-file-permissions.mjs")
     : undefined;
-  const searchBrowserFallbackPath = app.isPackaged
-    ? join(process.resourcesPath, "search-browser-fallback")
-    : undefined;
+  const extensionsDir = app.isPackaged
+    ? join(process.resourcesPath, "extensions")
+    : resolve(dirname(fileURLToPath(import.meta.url)), "../../../extensions");
 
   // Temporary storage for pending OAuth credentials (between acquire and save steps)
   let pendingOAuthCreds: AcquiredOAuthCredentials | null = null;
@@ -611,8 +611,7 @@ app.whenReady().then(async () => {
     enableChatCompletions: true,
     commandsRestart: true,
     enableFilePermissions: true,
-    enableSearchBrowserFallback: true,
-    searchBrowserFallbackPath,
+    extensionsDir,
     enableGeminiCliAuth: hasGeminiOAuth,
     skipBootstrap: false,
     filePermissionsPluginPath,

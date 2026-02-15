@@ -44,15 +44,15 @@ function resolveFilePermissionsPluginPath(): string {
 }
 
 /**
- * Resolve the absolute path to the search-browser-fallback plugin directory.
- * OpenClaw discovers it via index.ts (loaded by jiti, no build step needed).
+ * Resolve the absolute path to the EasyClaw extensions/ directory.
+ * Each subdirectory with openclaw.plugin.json is auto-discovered by OpenClaw.
  */
-function resolveSearchBrowserFallbackPath(): string {
+function resolveExtensionsDir(): string {
   const monorepoRoot = findMonorepoRoot();
   if (!monorepoRoot) {
-    return resolve(process.cwd(), "extensions", "search-browser-fallback");
+    return resolve(process.cwd(), "extensions");
   }
-  return resolve(monorepoRoot, "extensions", "search-browser-fallback");
+  return resolve(monorepoRoot, "extensions");
 }
 
 /** Generate a random hex token for gateway auth. */
@@ -236,11 +236,12 @@ export interface WriteGatewayConfigOptions {
   /** Override path to the file permissions plugin .mjs entry file.
    *  Used in packaged Electron apps where the monorepo root doesn't exist. */
   filePermissionsPluginPath?: string;
-  /** Enable the search-browser-fallback plugin (falls back to browser when no search API key). */
-  enableSearchBrowserFallback?: boolean;
-  /** Override path to the search-browser-fallback plugin directory.
-   *  Used in packaged Electron apps where the monorepo root doesn't exist. */
-  searchBrowserFallbackPath?: string;
+  /** Absolute path to the EasyClaw extensions/ directory.
+   *  When provided, added to plugins.load.paths for auto-discovery of all
+   *  extensions with openclaw.plugin.json manifests.
+   *  In packaged Electron apps: set to process.resourcesPath + "extensions".
+   *  In dev: auto-resolved from monorepo root if not provided. */
+  extensionsDir?: string;
   /** Enable the google-gemini-cli-auth plugin (bundled in OpenClaw extensions). */
   enableGeminiCliAuth?: boolean;
   /** Skip OpenClaw bootstrap (prevents creating template files like AGENTS.md on first startup). */
@@ -417,7 +418,7 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
   }
 
   // Plugins configuration
-  if (options.plugins !== undefined || options.enableFilePermissions !== undefined || options.enableGeminiCliAuth !== undefined) {
+  if (options.plugins !== undefined || options.enableFilePermissions !== undefined || options.extensionsDir !== undefined || options.enableGeminiCliAuth !== undefined) {
     const existingPlugins =
       typeof config.plugins === "object" && config.plugins !== null
         ? (config.plugins as Record<string, unknown>)
@@ -476,40 +477,35 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
       }
     }
 
-    // Add search-browser-fallback plugin if enabled
-    if (options.enableSearchBrowserFallback !== undefined) {
-      const pluginPath = options.searchBrowserFallbackPath ?? resolveSearchBrowserFallbackPath();
+    // Add EasyClaw extensions directory to plugin load paths.
+    // OpenClaw's discoverInDirectory() auto-discovers all subdirectories
+    // with openclaw.plugin.json manifests.
+    {
+      const extDir = options.extensionsDir ?? resolveExtensionsDir();
 
-      // Only add the plugin if the path actually exists on disk.
-      // In packaged apps where searchBrowserFallbackPath wasn't provided,
-      // the auto-resolved path may be invalid (no monorepo root).
-      if (existsSync(pluginPath)) {
+      if (existsSync(extDir)) {
         const existingLoad =
           typeof merged.load === "object" && merged.load !== null
             ? (merged.load as Record<string, unknown>)
             : {};
         const existingPaths = Array.isArray(existingLoad.paths) ? existingLoad.paths : [];
 
-        // Replace any stale search-browser-fallback paths with the current resolved one
+        // Remove stale per-extension paths from previous config versions,
+        // and avoid duplicating the extensions dir itself.
         const filteredPaths = existingPaths.filter(
-          (p: unknown) => typeof p !== "string" || !p.includes("search-browser-fallback"),
+          (p: unknown) =>
+            typeof p !== "string" ||
+            (!p.includes("search-browser-fallback") &&
+             !p.includes("extensions/wecom") &&
+             !p.includes("extensions/dingtalk") &&
+             p !== extDir),
         );
         merged.load = {
           ...existingLoad,
-          paths: [...filteredPaths, pluginPath],
-        };
-
-        // Enable the plugin in entries
-        const existingEntries =
-          typeof merged.entries === "object" && merged.entries !== null
-            ? (merged.entries as Record<string, unknown>)
-            : {};
-        merged.entries = {
-          ...existingEntries,
-          "search-browser-fallback": { enabled: options.enableSearchBrowserFallback },
+          paths: [...filteredPaths, extDir],
         };
       } else {
-        log.warn(`search-browser-fallback plugin not found at ${pluginPath}, skipping`);
+        log.warn(`Extensions directory not found at ${extDir}, skipping`);
       }
     }
 

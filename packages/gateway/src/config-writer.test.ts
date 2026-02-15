@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -109,7 +109,7 @@ describe("config-writer", () => {
       expect(config.gateway.port).toBe(18789);
     });
 
-    it("creates config file with empty plugins object", () => {
+    it("creates config file with plugins object (extensions dir auto-added)", () => {
       const configPath = join(tmpDir, "openclaw.json");
       writeGatewayConfig({
         configPath,
@@ -117,7 +117,10 @@ describe("config-writer", () => {
       });
 
       const config = JSON.parse(readFileSync(configPath, "utf-8"));
-      expect(config.plugins).toEqual({});
+      // The extensions dir is always auto-added when the plugins block is entered
+      expect(config.plugins.load.paths).toBeDefined();
+      expect(config.plugins.load.paths.length).toBeGreaterThanOrEqual(1);
+      expect(config.plugins.load.paths.some((p: string) => p.endsWith("extensions"))).toBe(true);
     });
 
     it("creates config file with plugin entries", () => {
@@ -188,7 +191,8 @@ describe("config-writer", () => {
       const config = JSON.parse(readFileSync(configPath, "utf-8"));
       // EasyClaw-managed fields are updated
       expect(config.gateway.port).toBe(18789);
-      expect(config.plugins).toEqual({});
+      // plugins gets extensions dir auto-added
+      expect(config.plugins.load.paths.some((p: string) => p.endsWith("extensions"))).toBe(true);
       // User fields are preserved
       expect(config.userSetting).toBe("keep-me");
       expect(config.otherSection).toEqual({ data: true });
@@ -371,7 +375,12 @@ describe("config-writer", () => {
   describe("writeGatewayConfig - filePermissionsPluginPath override", () => {
     it("uses provided filePermissionsPluginPath instead of auto-resolving", () => {
       const configPath = join(tmpDir, "openclaw.json");
-      const customPath = "/app/Resources/file-permissions-plugin/easyclaw-file-permissions.mjs";
+      // Create a real file so existsSync() passes
+      const fpDir = join(tmpDir, "file-permissions-plugin");
+      mkdirSync(fpDir);
+      const customPath = join(fpDir, "easyclaw-file-permissions.mjs");
+      writeFileSync(customPath, "// plugin");
+
       writeGatewayConfig({
         configPath,
         enableFilePermissions: true,
@@ -391,8 +400,114 @@ describe("config-writer", () => {
       });
 
       const config = JSON.parse(readFileSync(configPath, "utf-8"));
-      expect(config.plugins.load.paths).toHaveLength(1);
-      expect(config.plugins.load.paths[0]).toContain("easyclaw-file-permissions.mjs");
+      // paths includes file-permissions plugin + extensions dir
+      expect(config.plugins.load.paths.some((p: string) => p.includes("easyclaw-file-permissions.mjs"))).toBe(true);
+      expect(config.plugins.load.paths.some((p: string) => p.endsWith("extensions"))).toBe(true);
+    });
+  });
+
+  describe("writeGatewayConfig - extensionsDir", () => {
+    it("uses provided extensionsDir in plugins.load.paths", () => {
+      const configPath = join(tmpDir, "openclaw.json");
+      const extDir = join(tmpDir, "my-extensions");
+      mkdirSync(extDir);
+      writeGatewayConfig({
+        configPath,
+        extensionsDir: extDir,
+      });
+
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      expect(config.plugins.load.paths).toContain(extDir);
+    });
+
+    it("skips extensionsDir when directory does not exist", () => {
+      const configPath = join(tmpDir, "openclaw.json");
+      const extDir = join(tmpDir, "nonexistent-extensions");
+      writeGatewayConfig({
+        configPath,
+        extensionsDir: extDir,
+        plugins: { entries: { p1: {} } },
+      });
+
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      // extensions dir should not be in paths (it doesn't exist)
+      const paths = config.plugins.load?.paths ?? [];
+      expect(paths).not.toContain(extDir);
+    });
+
+    it("cleans up stale per-extension paths", () => {
+      const configPath = join(tmpDir, "openclaw.json");
+      const extDir = join(tmpDir, "extensions");
+      mkdirSync(extDir);
+
+      // Pre-populate with old per-extension paths
+      writeFileSync(
+        configPath,
+        JSON.stringify({
+          plugins: {
+            load: {
+              paths: [
+                "/old/path/extensions/search-browser-fallback",
+                "/old/path/extensions/wecom",
+                "/old/path/extensions/dingtalk",
+                "/some/other/plugin",
+              ],
+            },
+          },
+        }),
+      );
+
+      writeGatewayConfig({
+        configPath,
+        extensionsDir: extDir,
+      });
+
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      const paths = config.plugins.load.paths as string[];
+      // Stale per-extension paths should be removed
+      expect(paths.some((p: string) => p.includes("search-browser-fallback"))).toBe(false);
+      expect(paths.some((p: string) => p.includes("extensions/wecom"))).toBe(false);
+      expect(paths.some((p: string) => p.includes("extensions/dingtalk"))).toBe(false);
+      // Other plugin paths preserved
+      expect(paths).toContain("/some/other/plugin");
+      // New unified extensions dir added
+      expect(paths).toContain(extDir);
+    });
+
+    it("does not duplicate extensionsDir on idempotent calls", () => {
+      const configPath = join(tmpDir, "openclaw.json");
+      const extDir = join(tmpDir, "extensions");
+      mkdirSync(extDir);
+
+      writeGatewayConfig({ configPath, extensionsDir: extDir });
+      writeGatewayConfig({ configPath, extensionsDir: extDir });
+
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      const paths = config.plugins.load.paths as string[];
+      const extDirCount = paths.filter((p: string) => p === extDir).length;
+      expect(extDirCount).toBe(1);
+    });
+
+    it("works alongside filePermissionsPluginPath", () => {
+      const configPath = join(tmpDir, "openclaw.json");
+      const extDir = join(tmpDir, "extensions");
+      mkdirSync(extDir);
+      const fpPath = join(tmpDir, "fp-plugin", "easyclaw-file-permissions.mjs");
+      mkdirSync(join(tmpDir, "fp-plugin"));
+      writeFileSync(fpPath, "// plugin");
+
+      writeGatewayConfig({
+        configPath,
+        enableFilePermissions: true,
+        filePermissionsPluginPath: fpPath,
+        extensionsDir: extDir,
+      });
+
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      const paths = config.plugins.load.paths as string[];
+      expect(paths).toContain(fpPath);
+      expect(paths).toContain(extDir);
+      expect(config.plugins.entries["easyclaw-file-permissions"]).toEqual({ enabled: true });
     });
   });
 
