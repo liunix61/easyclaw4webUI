@@ -90,12 +90,10 @@ Uncomment the signing steps in `.github/workflows/build.yml`:
 
 ### 7. Test the Signing Workflow
 
-Create a test tag to trigger the build:
+Trigger the build manually via GitHub Actions:
 
-```bash
-git tag v0.1.0-test
-git push origin v0.1.0-test
-```
+1. Go to **Actions > Build & Release > Run workflow**
+2. Click **Run workflow** on the `main` branch
 
 Check the GitHub Actions run results.
 

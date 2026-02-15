@@ -1,9 +1,6 @@
 name: Build & Release
 
 on:
-  push:
-    tags:
-      - "v*"
   workflow_dispatch:
 
 jobs:
@@ -19,7 +16,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 25
           cache: pnpm
 
       - name: Setup OpenClaw vendor
@@ -80,7 +77,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 25
           cache: pnpm
 
       - name: Setup OpenClaw vendor
@@ -125,39 +122,3 @@ jobs:
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
           retention-days: 30
-
-  create-release:
-    needs: [build-windows, build-macos]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: .github/RELEASE_BODY.md
-          sparse-checkout-cone-mode: false
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-installers
-          path: ./release/windows
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: macos-installers
-          path: ./release/macos
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true
-          generate_release_notes: true
-          body_path: .github/RELEASE_BODY.md
-          files: |
-            release/windows/*.exe
-            release/macos/*.dmg
-            release/macos/*.zip

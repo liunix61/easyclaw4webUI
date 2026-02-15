@@ -1,148 +1,65 @@
-# GitHub Actions Configuration
+# CI/CD & Release
 
-This directory contains CI/CD automation configuration for the EasyClaw project.
+## Build & Release Strategy
 
-## 📁 File Structure
+Releases are built **locally** using `scripts/release-local.sh`, not via CI. GitHub Actions is used only for PR validation and as a fallback build environment.
 
-### Workflows (Automation)
+### Local Release Pipeline (`scripts/release-local.sh`)
+
+The primary release workflow. Runs on the developer's machine:
+
+```
+1. Prebuild native modules (rebuild-native.sh)
+2. Build all workspace packages (pnpm run build)
+3. Unit tests (pnpm run test)
+4. E2E dev tests (Playwright against dev build)
+5. Pack application (electron-builder --dir)
+6. E2E prod tests (Playwright against packed app)
+7. Build distributable installers (DMG/ZIP or NSIS)
+8. Upload to GitHub Release (gh release upload)
+9. Restore native prebuilds
+```
+
+Usage:
+```bash
+./scripts/release-local.sh 1.2.8          # full pipeline
+./scripts/release-local.sh --skip-tests   # build + upload only
+./scripts/release-local.sh --skip-upload  # build + test, no upload
+```
+
+## GitHub Actions Workflows
 
 | File | Trigger | Purpose |
 |------|---------|---------|
-| `test-build.yml` | Every push to `main` or PR | Test builds (unsigned) to ensure code doesn't break the build process |
-| `build.yml` | Push `v*` tag | Official release: build, sign, and create GitHub Release |
+| `test-build.yml` | Push to `main` or PR | Verify builds compile on Windows + macOS (unsigned, no tests) |
+| `build.yml` | Manual (`workflow_dispatch`) | Fallback: build + upload artifacts on CI (no auto-release) |
 
-### Documentation
+## File Structure
 
 | File | Description |
 |------|-------------|
-| `SIGNPATH_SETUP.md` | **SignPath Foundation Setup Guide** - Get free Windows code signing |
-| `RELEASE_CHECKLIST.md` | Complete checklist for releasing a new version |
+| `RELEASE_BODY.md` | Template body appended to GitHub Releases |
+| `SIGNPATH_SETUP.md` | Guide for free Windows code signing via SignPath Foundation |
+| `CI_CD.md` | This file |
 
-## 🚀 Quick Start
+## Code Signing Status
 
-### 1. Test Automated Builds (Available Now)
+| Platform | Signing | Status |
+|----------|---------|--------|
+| **macOS** | Apple Developer | Local signing configured |
+| **Windows** | SignPath Foundation | Pending setup (see `SIGNPATH_SETUP.md`) |
 
-```bash
-# Push code to GitHub
-git add .
-git commit -m "feat: add CI/CD workflows"
-git push origin main
-```
+## Vendor Pruning
 
-GitHub Actions will automatically run `test-build.yml` to verify Windows and macOS build processes.
+`dist:mac` / `dist:win` scripts automatically prune `vendor/openclaw/node_modules` before packaging to reduce installer size.
 
-View results at: https://github.com/gaoyangz77/easyclaw/actions
-
-### 2. Apply for Free Windows Signing (Recommended)
-
-**Important**: SignPath Foundation is completely free for open source projects!
-
-1. 📖 Read [`SIGNPATH_SETUP.md`](./SIGNPATH_SETUP.md)
-2. 🌐 Visit https://about.signpath.io/product/open-source
-3. 📝 Fill out the application (1-3 day review)
-4. 🔑 Add GitHub Secrets after approval
-5. ✅ Uncomment signing steps in `build.yml`
-
-### 3. Release Your First Version
-
-```bash
-# Update version number
-vim apps/desktop/package.json  # Change to "version": "0.1.0"
-
-# Commit and create tag
-git add .
-git commit -m "chore: bump version to v0.1.0"
-git tag -a v0.1.0 -m "Release v0.1.0"
-git push origin main
-git push origin v0.1.0
-```
-
-GitHub Actions will automatically build and create a Draft Release.
-
-## 📊 Current Status
-
-| Platform | Build | Signing | Status |
-|----------|-------|---------|--------|
-| **Windows** | ✅ Configured | ⏳ Awaiting SignPath approval | Available (unsigned) |
-| **macOS** | ✅ Configured | ❌ Requires Apple Developer | Available (unsigned) |
-
-## 🔐 Required GitHub Secrets
-
-### Windows Signing (After SignPath Foundation Approval)
-
-Add in `Settings → Secrets → Actions`:
-
-```
-SIGNPATH_API_TOKEN         # Provided by SignPath
-SIGNPATH_ORGANIZATION_ID   # From SignPath dashboard
-```
-
-### macOS Signing (Optional, requires Apple Developer $99/year)
-
-```
-MACOS_CERTIFICATE          # Base64-encoded .p12 certificate
-MACOS_CERTIFICATE_PWD      # Certificate password
-KEYCHAIN_PASSWORD          # Temporary keychain password (any strong password)
-APPLE_ID                   # Apple ID email
-APPLE_APP_SPECIFIC_PASSWORD # App-specific password
-APPLE_TEAM_ID              # 10-character team ID
-```
-
-## 📦 Vendor Pruning
-
-The CI workflow and local `dist:mac`/`dist:win` scripts automatically prune `vendor/openclaw/node_modules` before packaging to reduce installer size (~357MB → ~260MB DMG).
-
-**How it works:**
-
-- **CI (`build.yml`)**: Runs `pnpm install --prod --no-frozen-lockfile` during vendor setup, removing devDependencies before the app build step.
-- **Local (`dist:mac` / `dist:win`)**: Runs `apps/desktop/scripts/prune-vendor-deps.cjs` which performs 3-phase pruning (prod install → remove non-gateway packages → strip docs/tests/maps). Idempotent — skips if already pruned.
-
-**After building locally**, vendor node_modules will be pruned. To restore full deps for development:
-
+After building locally, restore full deps for development:
 ```bash
 cd vendor/openclaw && CI=true pnpm install --no-frozen-lockfile && cd ../..
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### Build Failures
-
-1. Check GitHub Actions logs
-2. Ensure `pnpm install` and `pnpm run build` work locally
-3. Verify Node.js version (should be 22)
-
-### Signing Failures
-
-1. **Windows**: Check SignPath API token and Organization ID
-2. **macOS**: Verify all Apple secrets are correctly configured
-3. Check SignPath dashboard for signing request status
-
-### File Path Issues
-
-Check actual file names in `apps/desktop/release/`, could be:
-- `EasyClaw-Setup.exe` ✅
-- `EasyClaw Setup.exe` ❌ (with space)
-
-Update paths in `build.yml` accordingly.
-
-## 📚 Further Reading
-
-- [electron-builder Documentation](https://www.electron.build/)
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [SignPath Documentation](https://about.signpath.io/documentation)
-- [Apple Notarization Guide](https://developer.apple.com/documentation/security/notarizing_macos_software_before_distribution)
-
-## 💡 Best Practices
-
-1. **Sign only on release**: Signing on every push wastes resources
-2. **Use Draft Releases**: Review files before publishing to avoid mistakes
-3. **Keep secrets secure**: Regularly rotate passwords and tokens
-4. **Test builds locally**: Ensure packaging works before pushing tags
-
-## 🎯 Next Steps
-
-- [ ] Push code and test `test-build.yml` workflow
-- [ ] Apply for SignPath Foundation free signing
-- [ ] (Optional) Purchase Apple Developer account
-- [ ] Configure GitHub Secrets
-- [ ] Release first official version v0.1.0
+- **Native module errors**: Run `./scripts/rebuild-native.sh --force`
+- **Build failures on CI**: Verify Node.js version matches (currently 25)
+- **E2E test timeouts**: Ensure no stale EasyClaw processes are running

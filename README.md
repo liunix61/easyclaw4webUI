@@ -45,7 +45,7 @@ EasyClaw enforces file access permissions through an OpenClaw plugin that interc
 
 | Tool    | Version    |
 | ------- | ---------- |
-| Node.js | >= 22.12.0 |
+| Node.js | >= 25      |
 | pnpm    | 10.6.2     |
 
 ## Quick Start
@@ -90,7 +90,8 @@ easyclaw/
 │   ├── dingtalk/         # DingTalk channel integration
 │   └── wecom/            # WeCom channel plugin (runs inside gateway)
 ├── scripts/
-│   └── release.sh        # Build installers + update website
+│   ├── release-local.sh  # Local release pipeline (build, test, upload)
+│   └── rebuild-native.sh # Prebuild better-sqlite3 for Node.js + Electron
 ├── vendor/
 │   └── openclaw/         # Vendored OpenClaw binary (gitignored)
 └── website/              # Static site + nginx/docker for hosting releases
@@ -271,22 +272,23 @@ CSC_LINK=<path-to-.pfx-certificate>
 CSC_KEY_PASSWORD=<certificate-password>
 ```
 
-### Automated Release
+### Local Release
 
-The `scripts/release.sh` script handles the full pipeline:
+The `scripts/release-local.sh` script handles the full pipeline:
 
 ```bash
-./scripts/release.sh 0.1.0
+./scripts/release-local.sh 1.2.8            # full pipeline
+./scripts/release-local.sh --skip-tests      # build + upload only
+./scripts/release-local.sh --skip-upload     # build + test, no upload
 ```
 
 This will:
 
-1. Set version in `apps/desktop/package.json`
+1. Prebuild native modules for Node.js + Electron
 2. Build all workspace packages
-3. Build macOS DMG and Windows NSIS installer
-4. Compute SHA-256 hashes
-5. Copy installers to `website/site/releases/`
-6. Update `website/site/update-manifest.json` and `website/site/index.html` with new hashes and download links
+3. Run unit tests and E2E tests (dev + prod)
+4. Build macOS DMG/ZIP or Windows NSIS installer
+5. Upload artifacts to a draft GitHub Release
 
 ## Note: better-sqlite3 native module
 

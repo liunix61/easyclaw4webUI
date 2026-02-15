@@ -45,7 +45,7 @@ EasyClaw 通过 OpenClaw 插件在工具调用*执行前*拦截并验证文件�
 
 | 工具    | 版本       |
 | ------- | ---------- |
-| Node.js | >= 22.12.0 |
+| Node.js | >= 25      |
 | pnpm    | 10.6.2     |
 
 ## 快速开始
@@ -90,7 +90,8 @@ easyclaw/
 │   ├── dingtalk/         # 钉钉通道集成
 │   └── wecom/            # 企业微信通道插件（运行在网关内）
 ├── scripts/
-│   └── release.sh        # 构建安装包 + 更新网站
+│   ├── release-local.sh  # 本地发布流程（构建、测试、上传）
+│   └── rebuild-native.sh # 预编译 better-sqlite3（Node.js + Electron）
 ├── vendor/
 │   └── openclaw/         # 内置的 OpenClaw（gitignored）
 └── website/              # 静态站点 + nginx/docker 托管发布
@@ -270,22 +271,23 @@ CSC_LINK=<.pfx 证书路径>
 CSC_KEY_PASSWORD=<证书密码>
 ```
 
-### 自动发布
+### 本地发布
 
-`scripts/release.sh` 脚本处理完整流程：
+`scripts/release-local.sh` 脚本处理完整流程：
 
 ```bash
-./scripts/release.sh 0.1.0
+./scripts/release-local.sh 1.2.8            # 完整流程
+./scripts/release-local.sh --skip-tests      # 仅构建 + 上传
+./scripts/release-local.sh --skip-upload     # 构建 + 测试，不上传
 ```
 
 它会：
 
-1. 设置 `apps/desktop/package.json` 中的版本号
+1. 预编译 Node.js + Electron 的原生模块
 2. 构建所有工作区包
-3. 构建 macOS DMG 和 Windows NSIS 安装包
-4. 计算 SHA-256 哈希
-5. 将安装包复制到 `website/site/releases/`
-6. 更新 `website/site/update-manifest.json` 和 `website/site/index.html` 中的哈希与下载链接
+3. 运行单元测试和 E2E 测试（开发 + 生产模式）
+4. 构建 macOS DMG/ZIP 或 Windows NSIS 安装包
+5. 上传到 GitHub Release 草稿
 
 ## 注意：better-sqlite3 原生模块
 
