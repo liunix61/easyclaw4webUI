@@ -148,7 +148,10 @@ test.describe("EasyClaw Smoke Tests", () => {
     await expect(zhipuCard.locator(".badge-active")).toBeVisible();
   });
 
-  test("window has correct web preferences", async ({ electronApp }) => {
+  test("window has correct web preferences", async ({ electronApp, window }) => {
+    // Ensure window is created before evaluating
+    await expect(window).toBeTruthy();
+
     const prefs = await electronApp.evaluate(({ BrowserWindow }) => {
       const win = BrowserWindow.getAllWindows()[0];
       const wp = win?.webContents.getLastWebPreferences();
@@ -157,6 +160,7 @@ test.describe("EasyClaw Smoke Tests", () => {
         contextIsolation: wp?.contextIsolation,
       };
     });
+
     expect(prefs.nodeIntegration).toBe(false);
     expect(prefs.contextIsolation).toBe(true);
   });
