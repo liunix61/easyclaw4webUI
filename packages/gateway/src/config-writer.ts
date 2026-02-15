@@ -491,14 +491,22 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
         const existingPaths = Array.isArray(existingLoad.paths) ? existingLoad.paths : [];
 
         // Remove stale per-extension paths from previous config versions,
+        // old extensionsDir paths from different install locations (e.g.
+        // /Volumes/EasyClaw/... vs /Applications/EasyClaw.app/...),
         // and avoid duplicating the extensions dir itself.
+        // Use sep-agnostic checks so this works on both macOS (/) and Windows (\).
+        const isStaleExtPath = (p: string): boolean => {
+          const normalized = p.replace(/\\/g, "/");
+          return (
+            normalized.includes("search-browser-fallback") ||
+            normalized.includes("extensions/wecom") ||
+            normalized.includes("extensions/dingtalk") ||
+            normalized.endsWith("/extensions") ||
+            p === extDir
+          );
+        };
         const filteredPaths = existingPaths.filter(
-          (p: unknown) =>
-            typeof p !== "string" ||
-            (!p.includes("search-browser-fallback") &&
-             !p.includes("extensions/wecom") &&
-             !p.includes("extensions/dingtalk") &&
-             p !== extDir),
+          (p: unknown) => typeof p !== "string" || !isStaleExtPath(p),
         );
         merged.load = {
           ...existingLoad,
@@ -506,6 +514,19 @@ export function writeGatewayConfig(options: WriteGatewayConfigOptions): string {
         };
       } else {
         log.warn(`Extensions directory not found at ${extDir}, skipping`);
+      }
+    }
+
+    // Clean up stale plugin entries that are now auto-discovered via extensionsDir.
+    // Having them in both entries and load.paths causes "duplicate plugin id" warnings.
+    {
+      const existingEntries =
+        typeof merged.entries === "object" && merged.entries !== null
+          ? (merged.entries as Record<string, unknown>)
+          : {};
+      delete existingEntries["search-browser-fallback"];
+      if (Object.keys(existingEntries).length > 0) {
+        merged.entries = existingEntries;
       }
     }
 
