@@ -116,6 +116,10 @@ rm -rf "$RELEASE_DIR"
 (cd "$DESKTOP_DIR" && pnpm run pack)
 info "Pack complete."
 
+# electron-builder's @electron/rebuild overwrites build/Release/ with Electron ABI.
+# Restore dual prebuilds so the Node.js-based E2E seed helper can load better-sqlite3.
+bash "$REPO_ROOT/scripts/rebuild-native.sh"
+
 # ---- Step 7: E2E tests (prod mode) ----
 if [ "$SKIP_TESTS" = false ]; then
   step "Run E2E tests (prod mode)"
