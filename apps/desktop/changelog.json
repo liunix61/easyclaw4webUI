@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.3.1",
+    "date": "2026-02-17",
+    "en": [
+      "Per-key usage tracking with pricing breakdown and inline label editing",
+      "Auth type badge on provider keys",
+      "Fixed Select dropdown clipping in forms",
+      "Fixed Windows installer artifact naming"
+    ],
+    "zh": [
+      "按密钥用量追踪，支持费用明细和内联标签编辑",
+      "服务商密钥显示认证类型标识",
+      "修复表单中下拉菜单被裁剪的问题",
+      "修复 Windows 安装包文件命名"
+    ]
+  },
+  {
     "version": "1.3.0",
     "date": "2026-02-15",
     "en": [
