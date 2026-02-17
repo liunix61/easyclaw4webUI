@@ -7,7 +7,7 @@
   "description": "Desktop runtime manager for OpenClaw",
   "scripts": {
     "build": "tsdown",
-    "dev": "electron-rebuild -f -o better-sqlite3 && tsdown && PANEL_DEV_URL=http://localhost:5180 ELECTRON_RUN_AS_NODE= electron .",
+    "dev": "tsdown && PANEL_DEV_URL=http://localhost:5180 ELECTRON_RUN_AS_NODE= electron .",
     "lint": "oxlint",
     "test": "vitest run",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",

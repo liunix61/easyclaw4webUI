@@ -86,6 +86,8 @@ step "Install dependencies"
 info "Dependencies up to date."
 
 # ---- Step 2: Prebuild native modules ----
+# postinstall hook normally handles this, but run explicitly in case
+# pnpm install was a no-op (deps already satisfied).
 step "Prebuild native modules (Node.js + Electron)"
 bash "$REPO_ROOT/scripts/rebuild-native.sh"
 info "Native prebuilds ready."
