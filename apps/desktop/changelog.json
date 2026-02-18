@@ -1,5 +1,21 @@
 [
   {
+    "version": "1.4.1",
+    "date": "2026-02-17",
+    "en": [
+      "Refactored plugin architecture: split openclaw-plugin into policy package + extension shell",
+      "Added privacy notice to WeChat Customer Service binding modal",
+      "New Settings page with DM scope control and clearer navigation labels",
+      "Fixed sharp native binaries missing in packaged app"
+    ],
+    "zh": [
+      "重构插件架构：将 openclaw-plugin 拆分为 policy 包和扩展外壳",
+      "微信客服绑定弹窗新增隐私声明",
+      "新增设置页面，支持私聊范围控制，优化导航标签",
+      "修复打包后 sharp 原生二进制文件缺失问题"
+    ]
+  },
+  {
     "version": "1.4.0",
     "date": "2026-02-19",
     "en": [
